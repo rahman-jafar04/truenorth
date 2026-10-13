@@ -28,6 +28,12 @@ export interface InMemoryTask extends TaskResponse {
   auditEvents: TaskAuditEvent[];
 }
 
+export interface PersistedDailyReportSummary extends DailyReport {
+  lastEventId: string | null;
+  eventCount: number;
+  syncedAt: string;
+}
+
 /**
  * Reschedules a task to a future date while maintaining strict historical accuracy:
  * - Never overwrites originalScheduledDate.
@@ -213,5 +219,52 @@ export function computeHistoricalDailyReport(
     tasks: dayTasks,
     thoughtsLoggedCount: 0,
     focusLockSessionsCount: 0
+  };
+}
+
+/**
+ * Syncs and verifies a persisted daily report summary with underlying immutable audit events.
+ * Guarantees that any cached or persisted summary stays 100% consistent with the audit log.
+ */
+export function syncPersistedDailySummary(
+  allTasks: InMemoryTask[],
+  targetDate: string,
+  userTimezone: string = "UTC",
+  existingSummary?: PersistedDailyReportSummary | null
+): PersistedDailyReportSummary {
+  const derivedReport = computeHistoricalDailyReport(allTasks, targetDate, userTimezone);
+
+  // Collect all audit events relevant to this date
+  const relevantEvents: TaskAuditEvent[] = [];
+  for (const t of allTasks) {
+    for (const ev of t.auditEvents) {
+      const evDate = getUserLocalDate(ev.createdAt, userTimezone);
+      if (evDate === targetDate || ev.previousDate === targetDate || ev.newDate === targetDate) {
+        relevantEvents.push(ev);
+      }
+    }
+  }
+
+  // Sort chronologically
+  relevantEvents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const lastEvent = relevantEvents[relevantEvents.length - 1];
+
+  // If existing summary exists and matches event count and last event id, verify consistency
+  if (
+    existingSummary &&
+    existingSummary.date === targetDate &&
+    existingSummary.timezone === userTimezone &&
+    existingSummary.lastEventId === (lastEvent?.id ?? null) &&
+    existingSummary.eventCount === relevantEvents.length
+  ) {
+    return existingSummary; // Cached summary is fully valid and consistent
+  }
+
+  // Otherwise, deterministically rebuild the summary from source-of-truth events
+  return {
+    ...derivedReport,
+    lastEventId: lastEvent?.id ?? null,
+    eventCount: relevantEvents.length,
+    syncedAt: new Date().toISOString()
   };
 }

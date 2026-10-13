@@ -4,6 +4,7 @@ import {
   reopenTask,
   completeTask,
   computeHistoricalDailyReport,
+  syncPersistedDailySummary,
   getUserLocalDate,
   InMemoryTask
 } from "../src/services/taskHistory";
@@ -109,5 +110,27 @@ describe("Historical Accuracy & Timezone Integrity", () => {
     expect(dateInUTC).toBe("2026-10-13");
     expect(dateInLA).toBe("2026-10-12");
     expect(dateInKolkata).toBe("2026-10-13");
+  });
+
+  it("should maintain strict consistency between cached summaries and immutable audit events", () => {
+    // 1. Generate initial summary
+    const summaryV1 = syncPersistedDailySummary([sampleTask], "2026-10-12", "UTC", null);
+    expect(summaryV1.totalTasks).toBe(1);
+    expect(summaryV1.eventCount).toBe(0);
+
+    // 2. Complete task -> summary must invalidate and update eventCount
+    const { task: completedTask, auditEvent } = completeTask(
+      sampleTask,
+      new Date("2026-10-12T10:00:00.000Z")
+    );
+
+    const summaryV2 = syncPersistedDailySummary([completedTask], "2026-10-12", "UTC", summaryV1);
+    expect(summaryV2.completedCount).toBe(1);
+    expect(summaryV2.eventCount).toBe(1);
+    expect(summaryV2.lastEventId).toBe(auditEvent.id);
+
+    // 3. Same data with existing valid summary returns cached instance without drift
+    const summaryCached = syncPersistedDailySummary([completedTask], "2026-10-12", "UTC", summaryV2);
+    expect(summaryCached).toBe(summaryV2);
   });
 });

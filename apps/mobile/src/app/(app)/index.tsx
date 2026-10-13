@@ -10,23 +10,28 @@ import { useRouter } from "expo-router";
 import { theme } from "../../theme";
 import { FocusLockBridge, FocusTimerSession } from "../../native/FocusLockBridge";
 import { apiClient } from "../../services/apiClient";
+import { PlatformCapabilities } from "@truenorth/shared";
 
 export default function DashboardScreen() {
   const router = useRouter();
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [platformCaps, setPlatformCaps] = useState<PlatformCapabilities | null>(null);
+
+  // In-App Focus Timer state
   const [timerSession, setTimerSession] = useState<FocusTimerSession>({
     isActive: false,
     durationMinutes: 25,
-    remainingSeconds: 1500,
+    remainingSeconds: 25 * 60,
     startedAt: null
   });
+  const [selectedPresetMinutes, setSelectedPresetMinutes] = useState(25);
 
   const personalValues = ["Diligence", "Integrity", "Deep Focus"];
-  const todayTasks = [
+  const [todayTasks, setTodayTasks] = useState([
     { id: "1", title: "Complete System Architecture RFC", completed: true, required: true },
     { id: "2", title: "Review Goal Alignment with Faith Mode", completed: false, required: true },
     { id: "3", title: "Exercise & Physical Endurance (30m)", completed: false, required: false }
-  ];
+  ]);
 
   useEffect(() => {
     apiClient
@@ -34,20 +39,59 @@ export default function DashboardScreen() {
       .then(() => setApiOnline(true))
       .catch(() => setApiOnline(false));
 
+    FocusLockBridge.getCapabilities().then(setPlatformCaps);
     setTimerSession(FocusLockBridge.getFocusTimerSession());
   }, []);
 
-  function toggleFocusTimer() {
-    if (timerSession.isActive) {
-      setTimerSession(FocusLockBridge.stopFocusTimer());
-    } else {
-      setTimerSession(FocusLockBridge.startFocusTimer(25));
+  // Timer countdown ticker
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (timerSession.isActive && timerSession.remainingSeconds > 0) {
+      interval = setInterval(() => {
+        setTimerSession((prev) => {
+          if (prev.remainingSeconds <= 1) {
+            FocusLockBridge.stopFocusTimer();
+            return { ...prev, isActive: false, remainingSeconds: 0 };
+          }
+          return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+        });
+      }, 1000);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [timerSession.isActive, timerSession.remainingSeconds]);
+
+  function formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  function handleStartTimer(minutes: number) {
+    setSelectedPresetMinutes(minutes);
+    const session = FocusLockBridge.startFocusTimer(minutes);
+    setTimerSession(session);
+  }
+
+  function handleStopTimer() {
+    const session = FocusLockBridge.stopFocusTimer();
+    setTimerSession({
+      ...session,
+      durationMinutes: selectedPresetMinutes,
+      remainingSeconds: selectedPresetMinutes * 60
+    });
+  }
+
+  function toggleTask(id: string) {
+    setTodayTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+    );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Live / Prototype Integration Banner */}
+      {/* Backend Integration Status Bar */}
       <View style={styles.statusBar}>
         <View style={styles.statusRow}>
           <View
@@ -57,16 +101,21 @@ export default function DashboardScreen() {
             ]}
           />
           <Text style={styles.statusText}>
-            Backend: {apiOnline === null ? "Probing..." : apiOnline ? "Connected (Live Express API)" : "Offline (Local Preview)"}
+            Backend: {apiOnline === null ? "Connecting..." : apiOnline ? "Connected (Express API :4000)" : "Offline (Local Prototype)"}
           </Text>
         </View>
-        <Text style={styles.prototypeNotice}>Phase 1 Foundation</Text>
+        <Text style={styles.prototypeNotice}>PHASE 1 FOUNDATION</Text>
       </View>
 
       {/* User Values & Daily Compass */}
       <View style={styles.card}>
-        <Text style={styles.greeting}>Welcome back</Text>
-        <Text style={styles.subgreeting}>Here is your TrueNorth compass for today.</Text>
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.greeting}>Daily Compass</Text>
+          <View style={styles.prototypeChip}>
+            <Text style={styles.prototypeChipText}>PROTOTYPE VALUES</Text>
+          </View>
+        </View>
+        <Text style={styles.subgreeting}>Your personal north star virtues for today:</Text>
 
         <View style={styles.valuesContainer}>
           {personalValues.map((val) => (
@@ -77,45 +126,105 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* Focus Lock / In-App Focus Timer Fallback Card */}
+      {/* Reliable In-App Focus Timer */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardTitle}>Focus Lock Session</Text>
-          <View style={styles.badgeFallback}>
-            <Text style={styles.badgeFallbackText}>In-App Timer Active</Text>
+          <Text style={styles.cardTitle}>In-App Focus Timer</Text>
+          <View style={styles.reliableBadge}>
+            <Text style={styles.reliableBadgeText}>Reliable Focus Active</Text>
           </View>
         </View>
 
-        <Text style={styles.cardDescription}>
-          Restricts social media distraction. In Expo/un-entitled runtimes, TrueNorth uses the in-app focus timer.
-        </Text>
-
-        <View style={styles.timerRow}>
-          <Text style={styles.timerDisplay}>
-            {timerSession.isActive ? "25:00 Remaining" : "25 min Pomodoro"}
+        {/* Honest Platform Capabilities Check Notice */}
+        <View style={styles.capsNotice}>
+          <Text style={styles.capsTitle}>
+            Platform: {platformCaps?.platform.toUpperCase() || "MOBILE"} (Unverified Device Blocking)
           </Text>
-          <TouchableOpacity
-            style={[styles.timerButton, timerSession.isActive && styles.timerButtonActive]}
-            onPress={toggleFocusTimer}
-          >
-            <Text style={styles.timerButtonText}>
-              {timerSession.isActive ? "Stop Session" : "Start Focus"}
-            </Text>
-          </TouchableOpacity>
+          <Text style={styles.capsBody}>
+            {platformCaps?.entitlementOrPermissionNotice ||
+              "Native OS app blocking requires unverified entitlements. TrueNorth enforces focus using this reliable in-app timer."}
+          </Text>
+        </View>
+
+        {/* Timer Display */}
+        <View style={styles.timerCenter}>
+          <Text style={styles.countdownDigits}>
+            {formatTime(timerSession.remainingSeconds)}
+          </Text>
+          <Text style={styles.countdownLabel}>
+            {timerSession.isActive ? "Deep Focus Session in Progress" : "Ready to Focus"}
+          </Text>
+        </View>
+
+        {/* Preset Selector */}
+        {!timerSession.isActive && (
+          <View style={styles.presetRow}>
+            {[15, 25, 45, 60].map((mins) => (
+              <TouchableOpacity
+                key={mins}
+                style={[
+                  styles.presetBtn,
+                  selectedPresetMinutes === mins && styles.presetBtnActive
+                ]}
+                onPress={() => {
+                  setSelectedPresetMinutes(mins);
+                  setTimerSession((prev) => ({
+                    ...prev,
+                    durationMinutes: mins,
+                    remainingSeconds: mins * 60
+                  }));
+                }}
+              >
+                <Text
+                  style={[
+                    styles.presetText,
+                    selectedPresetMinutes === mins && styles.presetTextActive
+                  ]}
+                >
+                  {mins}m
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Timer Action Buttons */}
+        <View style={styles.timerActionsRow}>
+          {timerSession.isActive ? (
+            <TouchableOpacity
+              style={styles.stopTimerBtn}
+              onPress={handleStopTimer}
+            >
+              <Text style={styles.stopTimerText}>End Focus Session</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.startTimerBtn}
+              onPress={() => handleStartTimer(selectedPresetMinutes)}
+            >
+              <Text style={styles.startTimerText}>
+                Start {selectedPresetMinutes}-Minute Focus
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* Today's Priority Tasks */}
+      {/* Today's Tasks */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <Text style={styles.cardTitle}>Today's Critical Tasks</Text>
           <TouchableOpacity onPress={() => router.push("/(app)/tasks")}>
-            <Text style={styles.linkText}>View All →</Text>
+            <Text style={styles.linkText}>View All Tasks →</Text>
           </TouchableOpacity>
         </View>
 
         {todayTasks.map((task) => (
-          <View key={task.id} style={styles.taskItem}>
+          <TouchableOpacity
+            key={task.id}
+            style={styles.taskItem}
+            onPress={() => toggleTask(task.id)}
+          >
             <Text style={styles.taskCheckbox}>{task.completed ? "☑" : "☐"}</Text>
             <View style={styles.taskInfo}>
               <Text
@@ -130,11 +239,11 @@ export default function DashboardScreen() {
                 <Text style={styles.requiredBadge}>Required for Focus Unlock</Text>
               )}
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
-      {/* Quick Actions */}
+      {/* Quick Navigation Cards */}
       <View style={styles.actionsRow}>
         <TouchableOpacity
           style={styles.actionCard}
@@ -142,7 +251,7 @@ export default function DashboardScreen() {
         >
           <Text style={styles.actionIcon}>💭</Text>
           <Text style={styles.actionTitle}>Reflect Thought</Text>
-          <Text style={styles.actionSub}>AI Alignment Check</Text>
+          <Text style={styles.actionSub}>Live AI Guidance</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -151,7 +260,7 @@ export default function DashboardScreen() {
         >
           <Text style={styles.actionIcon}>📊</Text>
           <Text style={styles.actionTitle}>Daily Review</Text>
-          <Text style={styles.actionSub}>Task Completion Log</Text>
+          <Text style={styles.actionSub}>Audit Log Analytics</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -205,15 +314,26 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.surfaceBorder
   },
   greeting: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "800",
     color: theme.colors.textPrimary
   },
   subgreeting: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.colors.textSecondary,
     marginTop: 2,
-    marginBottom: theme.spacing.sm
+    marginBottom: theme.spacing.xs
+  },
+  prototypeChip: {
+    backgroundColor: "rgba(148, 163, 184, 0.15)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm
+  },
+  prototypeChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: theme.colors.textMuted
   },
   valuesContainer: {
     flexDirection: "row",
@@ -241,55 +361,108 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs
   },
   cardTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: theme.colors.textPrimary
-  },
-  badgeFallback: {
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: theme.borderRadius.sm
-  },
-  badgeFallbackText: {
-    color: theme.colors.warning,
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  cardDescription: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.md,
-    lineHeight: 18
-  },
-  timerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.surfaceBorder
-  },
-  timerDisplay: {
     fontSize: 16,
     fontWeight: "700",
     color: theme.colors.textPrimary
   },
-  timerButton: {
+  reliableBadge: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm
+  },
+  reliableBadgeText: {
+    color: theme.colors.success,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  capsNotice: {
+    backgroundColor: "rgba(245, 158, 11, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.2)",
+    padding: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.md
+  },
+  capsTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.warning,
+    marginBottom: 2
+  },
+  capsBody: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    lineHeight: 15
+  },
+  timerCenter: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm
+  },
+  countdownDigits: {
+    fontSize: 48,
+    fontWeight: "800",
+    color: theme.colors.primary,
+    letterSpacing: 2
+  },
+  countdownLabel: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginTop: 2
+  },
+  presetRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: theme.spacing.sm,
+    marginVertical: theme.spacing.sm
+  },
+  presetBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder
+  },
+  presetBtnActive: {
     backgroundColor: theme.colors.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.md
+    borderColor: theme.colors.primary
   },
-  timerButtonActive: {
-    backgroundColor: theme.colors.error
-  },
-  timerButtonText: {
-    color: "#0F172A",
+  presetText: {
+    color: theme.colors.textSecondary,
     fontWeight: "700",
     fontSize: 13
+  },
+  presetTextActive: {
+    color: "#0F172A"
+  },
+  timerActionsRow: {
+    marginTop: theme.spacing.sm
+  },
+  startTimerBtn: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center"
+  },
+  startTimerText: {
+    color: "#0F172A",
+    fontWeight: "700",
+    fontSize: 14
+  },
+  stopTimerBtn: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center"
+  },
+  stopTimerText: {
+    color: theme.colors.error,
+    fontWeight: "700",
+    fontSize: 14
   },
   linkText: {
     color: theme.colors.primary,
@@ -342,12 +515,12 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs
   },
   actionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: theme.colors.textPrimary
   },
   actionSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.colors.textMuted,
     marginTop: 2
   }
