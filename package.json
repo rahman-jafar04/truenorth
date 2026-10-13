@@ -1,0 +1,21 @@
+{
+  "name": "truenorth-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TrueNorth: AI-powered to-do and self-discipline mobile application and backend",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspaces --if-present build",
+    "test": "npm run --workspaces --if-present test",
+    "typecheck": "npm run --workspaces --if-present typecheck",
+    "api:dev": "npm --workspace=@truenorth/api run dev",
+    "api:test": "npm --workspace=@truenorth/api run test",
+    "mobile:start": "npm --workspace=@truenorth/mobile run start"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

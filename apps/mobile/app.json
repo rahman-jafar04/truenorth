@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "TrueNorth",
+    "slug": "truenorth",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "truenorth",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.truenorth.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.truenorth.app"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

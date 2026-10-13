@@ -1,0 +1,168 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum GoalPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskStatus {
+  PLANNED
+  COMPLETED
+  PENDING
+  RESCHEDULED
+}
+
+model User {
+  id               String   @id // Supabase Auth user UUID
+  email            String   @unique
+  displayName      String?
+  faithModeEnabled Boolean  @default(false)
+  personalValues   String[] @default([])
+  timezone         String   @default("UTC")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  goals               Goal[]
+  tasks               Task[]
+  thoughts            Thought[]
+  focusPolicies       FocusLockPolicy[]
+  focusExceptions     FocusLockException[]
+  dailyReports        DailyReport[]
+
+  @@map("users")
+}
+
+model Goal {
+  id          String       @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  priority    GoalPriority @default(MEDIUM)
+  status      GoalStatus   @default(ACTIVE)
+  targetDate  DateTime?
+  category    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+  thoughts    Thought[]
+
+  @@index([userId])
+  @@map("goals")
+}
+
+model Task {
+  id                  String     @id @default(uuid())
+  userId              String
+  goalId              String?
+  title               String
+  description         String?
+  scheduledDate       String     // YYYY-MM-DD
+  status              TaskStatus @default(PLANNED)
+  isRequiredForUnlock Boolean    @default(false)
+  estimatedMinutes    Int?
+  completedAt         DateTime?
+  rescheduledToDate   String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal                Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  @@index([userId, scheduledDate])
+  @@map("tasks")
+}
+
+model Thought {
+  id               String   @id @default(uuid())
+  userId           String
+  associatedGoalId String?
+  content          String   // Keep private, exclude from default application logs
+  contextTag       String?
+  guidance         Json?    // Structured AI analysis (categories, reasoning, action, score)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal             Goal?    @relation(fields: [associatedGoalId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("thoughts")
+}
+
+model FocusLockPolicy {
+  id                    String   @id @default(uuid())
+  userId                String
+  name                  String
+  isActive              Boolean  @default(true)
+  restrictedApps        Json     // Array of RestrictedApp
+  requireTasksCompleted Boolean  @default(true)
+  requiredTaskIds       String[] @default([])
+  scheduleStartTime     String?  // HH:MM
+  scheduleEndTime       String?  // HH:MM
+  daysOfWeek            Int[]    @default([0, 1, 2, 3, 4, 5, 6])
+  strictModeEnabled     Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exceptions            FocusLockException[]
+
+  @@index([userId])
+  @@map("focus_lock_policies")
+}
+
+model FocusLockException {
+  id              String   @id @default(uuid())
+  policyId        String
+  userId          String
+  reason          String
+  durationMinutes Int
+  grantedAt       DateTime @default(now())
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  policy          FocusLockPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("focus_lock_exceptions")
+}
+
+model DailyReport {
+  id                    String   @id @default(uuid())
+  userId                String
+  date                  String   // YYYY-MM-DD
+  totalTasks            Int      @default(0)
+  completedCount        Int      @default(0)
+  pendingCount          Int      @default(0)
+  rescheduledCount      Int      @default(0)
+  plannedCount          Int      @default(0)
+  completionRatePercent Float    @default(0.0)
+  thoughtsLoggedCount   Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("daily_reports")
+}
