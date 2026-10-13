@@ -8,8 +8,8 @@ import { theme } from "../theme";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 2,
-      staleTime: 1000 * 60 * 5 // 5 minutes
+      retry: 1,
+      staleTime: 1000 * 60 * 5
     }
   }
 });
@@ -33,7 +33,12 @@ export default function RootLayout() {
           <Stack.Screen
             name="index"
             options={{
-              title: "TrueNorth",
+              headerShown: false
+            }}
+          />
+          <Stack.Screen
+            name="(app)"
+            options={{
               headerShown: false
             }}
           />

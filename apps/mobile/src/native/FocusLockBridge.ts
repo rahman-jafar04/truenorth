@@ -4,15 +4,23 @@ import {
   PlatformCapabilities,
   PermissionState,
   FocusLockStatus,
-  RestrictedApp
+  RestrictedApp,
+  FOCUS_LOCK_FEASIBILITY
 } from "@truenorth/shared";
+
+export interface FocusTimerSession {
+  isActive: boolean;
+  durationMinutes: number;
+  remainingSeconds: number;
+  startedAt: string | null;
+}
 
 /**
  * FocusLockBridge provides platform-specific app restriction enforcement.
  * Adheres strictly to OS security models:
  * - iOS: Requires FamilyControls & ManagedSettings entitlement (Screen Time API).
- * - Android: Requires UsageStatsManager + AccessibilityService / Overlay permission.
- * - Non-native / Simulator / Expo Go: Reports real permission states and operates in simulation mode.
+ * - Android: Requires UsageStatsManager + SYSTEM_ALERT_WINDOW.
+ * - Non-native / Simulator / Expo Go / Fallback: Provides transparent status and In-App Focus Timer.
  */
 class FocusLockBridgeImpl implements IFocusLockNativeBridge {
   private activeStatus: FocusLockStatus = {
@@ -23,28 +31,34 @@ class FocusLockBridgeImpl implements IFocusLockNativeBridge {
     exceptionExpiresAt: null
   };
 
+  private timerSession: FocusTimerSession = {
+    isActive: false,
+    durationMinutes: 25,
+    remainingSeconds: 25 * 60,
+    startedAt: null
+  };
+
   async getCapabilities(): Promise<PlatformCapabilities> {
     if (Platform.OS === "ios") {
       return {
         platform: "ios",
-        canBlockAppsDirectly: true,
+        canBlockAppsDirectly: false, // Cannot block until FamilyControls entitlement is approved by Apple
         requiredSystemPermissions: ["FamilyControls (Screen Time API)"],
         entitlementOrPermissionNotice:
-          "Requires Apple Developer entitlement 'com.apple.developer.family-controls' and iOS 16+ ManagedSettings framework."
+          FOCUS_LOCK_FEASIBILITY.ios.summary
       };
     }
 
     if (Platform.OS === "android") {
       return {
         platform: "android",
-        canBlockAppsDirectly: true,
+        canBlockAppsDirectly: false, // Cannot block until user manually grants Usage Access and Overlay
         requiredSystemPermissions: [
           "PACKAGE_USAGE_STATS",
-          "SYSTEM_ALERT_WINDOW",
-          "ACCESSIBILITY_SERVICE (Optional fallback)"
+          "SYSTEM_ALERT_WINDOW"
         ],
         entitlementOrPermissionNotice:
-          "Requires user to manually grant 'Usage Access' and 'Display over other apps' in Android System Settings."
+          FOCUS_LOCK_FEASIBILITY.android.summary
       };
     }
 
@@ -53,14 +67,13 @@ class FocusLockBridgeImpl implements IFocusLockNativeBridge {
       canBlockAppsDirectly: false,
       requiredSystemPermissions: [],
       entitlementOrPermissionNotice:
-        "Direct application blocking is not supported on web or desktop runtimes."
+        "Direct application blocking is not supported on web/desktop. In-app Focus Timer is active."
     };
   }
 
   async getPermissionStatus(): Promise<PermissionState> {
-    // In bare native runtime, this queries native bridge modules (NativeModules.TrueNorthFocusLock)
-    // In Expo Go or development environment, return NOT_DETERMINED or UNKNOWN
     if (Platform.OS === "ios" || Platform.OS === "android") {
+      // Until bare native module is compiled and entitlements granted, status is NOT_DETERMINED
       return "NOT_DETERMINED";
     }
     return "UNSUPPORTED";
@@ -68,20 +81,15 @@ class FocusLockBridgeImpl implements IFocusLockNativeBridge {
 
   async requestPermissions(): Promise<boolean> {
     const caps = await this.getCapabilities();
-    if (!caps.canBlockAppsDirectly) {
-      console.warn("Focus Lock cannot request native app blocking on this platform:", caps.platform);
-      return false;
-    }
-
-    // Explicit non-deceptive flow: informs user of exact native settings required
     console.info("Requesting platform permissions for Focus Lock:", caps.requiredSystemPermissions);
-    return false; // Will return true once native module is linked in bare build
+    // Explicit, non-deceptive flow: returns false until device-level native module is linked
+    return false;
   }
 
   async applyRestrictions(apps: RestrictedApp[]): Promise<boolean> {
     this.activeStatus.isRestricting = true;
     this.activeStatus.activeApps = apps;
-    console.info(`[FocusLockBridge] Enforcing policy for ${apps.length} restricted applications.`);
+    console.info(`[FocusLockBridge] Enforcing policy for ${apps.length} apps (In-App timer fallback active).`);
     return true;
   }
 
@@ -95,6 +103,27 @@ class FocusLockBridgeImpl implements IFocusLockNativeBridge {
   async getStatus(): Promise<FocusLockStatus> {
     return { ...this.activeStatus };
   }
+
+  // In-App Focus Timer Fallback
+  startFocusTimer(minutes: number = 25): FocusTimerSession {
+    this.timerSession = {
+      isActive: true,
+      durationMinutes: minutes,
+      remainingSeconds: minutes * 60,
+      startedAt: new Date().toISOString()
+    };
+    return { ...this.timerSession };
+  }
+
+  stopFocusTimer(): FocusTimerSession {
+    this.timerSession.isActive = false;
+    this.timerSession.startedAt = null;
+    return { ...this.timerSession };
+  }
+
+  getFocusTimerSession(): FocusTimerSession {
+    return { ...this.timerSession };
+  }
 }
 
-export const FocusLockBridge: IFocusLockNativeBridge = new FocusLockBridgeImpl();
+export const FocusLockBridge = new FocusLockBridgeImpl();

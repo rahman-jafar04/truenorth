@@ -14,37 +14,77 @@ export interface AnalyzeThoughtParams {
 }
 
 export class AiGuidanceValidationError extends Error {
-  constructor(message: string) {
+  constructor(message: string, public readonly details?: unknown) {
     super(message);
     this.name = "AiGuidanceValidationError";
   }
 }
 
 /**
- * Validates that an AI guidance payload conforms strictly to safety and schema requirements.
+ * Result returned by the validation pipeline.
+ * Encapsulates safe error handling without inventing an unverified analysis.
  */
-export function validateAndGuardGuidance(data: unknown): AiGuidanceResponse {
-  const parsed = AiGuidanceResponseSchema.parse(data);
+export type ValidationResult =
+  | { success: true; data: AiGuidanceResponse }
+  | {
+      success: false;
+      error: string;
+      safeMessage: string;
+    };
 
-  // Check the strict theological causality guardrail
+/**
+ * Multi-layer validator:
+ * 1. Zod structural validation
+ * 2. Literal & Paraphrased Supernatural Attribution Detection
+ */
+export function validateAndGuardGuidance(raw: unknown): ValidationResult {
+  // Layer 1: Strict Zod Schema Parse
+  const parseResult = AiGuidanceResponseSchema.safeParse(raw);
+  if (!parseResult.success) {
+    return {
+      success: false,
+      error: "SCHEMA_VALIDATION_FAILED",
+      safeMessage:
+        "The generated guidance did not conform to the required structured schema. The response was discarded for safety."
+    };
+  }
+
+  const data = parseResult.data;
+
+  // Layer 2: Paraphrased and Semantic Supernatural Attribution Scanner
   const combinedText = [
-    parsed.directReasoning,
-    parsed.nonShamingInsight,
-    parsed.faithReflection ?? "",
-    ...parsed.recommendedActions
+    data.directReasoning,
+    data.nonShamingInsight,
+    data.faithReflection ?? "",
+    ...data.recommendedActions
   ]
     .join(" ")
     .toLowerCase();
 
-  for (const prohibited of THEOLOGICAL_GUARDRAILS.PROHIBITED_PHRASES) {
-    if (combinedText.includes(prohibited)) {
-      throw new AiGuidanceValidationError(
-        `AI response violated theological causality guardrail: contains prohibited phrase "${prohibited}".`
-      );
+  // A. Check literal prohibited phrases
+  for (const literal of THEOLOGICAL_GUARDRAILS.PROHIBITED_LITERAL_PHRASES) {
+    if (combinedText.includes(literal)) {
+      return {
+        success: false,
+        error: "THEOLOGICAL_ATTRIBUTION_DETECTED",
+        safeMessage: `The generated guidance made an unpermitted causal attribution ("${literal}"). TrueNorth AI does not claim knowledge of supernatural agency.`
+      };
     }
   }
 
-  return parsed;
+  // B. Check paraphrased attribution regex patterns
+  for (const pattern of THEOLOGICAL_GUARDRAILS.PARAPHRASED_ATTRIBUTION_PATTERNS) {
+    const match = combinedText.match(pattern);
+    if (match) {
+      return {
+        success: false,
+        error: "PARAPHRASED_SUPERNATURAL_ATTRIBUTION_DETECTED",
+        safeMessage: `The generated guidance matched a prohibited supernatural attribution pattern ("${match[0]}"). TrueNorth AI does not claim knowledge of supernatural causality.`
+      };
+    }
+  }
+
+  return { success: true, data };
 }
 
 /**
@@ -63,6 +103,7 @@ CORE RULES:
 
 2. THEOLOGICAL & SPIRITUAL GUARDRAILS:
    ${THEOLOGICAL_GUARDRAILS.FORBIDDEN_ATTRIBUTION_RULE}
+   Never attribute thoughts, feelings, hesitation, or fatigue to Satan, the devil, demons, God's direct voice, or spiritual warfare.
    ${
      faithMode
        ? THEOLOGICAL_GUARDRAILS.FAITH_MODE_DIRECTIVE
@@ -93,7 +134,7 @@ export async function analyzeThought(params: AnalyzeThoughtParams): Promise<AiGu
   logger.info("Analyzing user thought", {
     faithModeEnabled,
     hasGoal: Boolean(goalTitle)
-    // Notice thought content is intentionally omitted for privacy
+    // Note: thought content is omitted for user privacy
   });
 
   // If no LLM key is configured (local dev / offline test), provide deterministic guidance
@@ -127,9 +168,14 @@ export async function analyzeThought(params: AnalyzeThoughtParams): Promise<AiGu
       alignmentScore: isProcrastination ? 35 : 85
     };
 
-    return validateAndGuardGuidance(fallbackResponse);
+    const validation = validateAndGuardGuidance(fallbackResponse);
+    if (!validation.success) {
+      throw new AiGuidanceValidationError(validation.safeMessage);
+    }
+
+    return validation.data;
   }
 
-  // Production hosted LLM integration branch will be invoked in Phase 4
-  throw new Error("Live hosted LLM call requested but provider credentials require validation");
+  // Production hosted LLM integration branch (requires provider key)
+  throw new Error("Live hosted LLM call requested but LLM_API_KEY is not configured.");
 }

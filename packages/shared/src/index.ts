@@ -8,6 +8,7 @@ export * from "./schemas/reports";
 
 // Constants & Guardrails
 export * from "./constants/aiGuardrails";
+export * from "./constants/focusLockFeasibility";
 
 // Types
 export * from "./types";

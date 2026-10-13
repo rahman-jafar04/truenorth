@@ -28,6 +28,14 @@ enum TaskStatus {
   RESCHEDULED
 }
 
+enum TaskAuditEventType {
+  CREATED
+  COMPLETED
+  REOPENED
+  RESCHEDULED
+  DELETED
+}
+
 model User {
   id               String   @id // Supabase Auth user UUID
   email            String   @unique
@@ -40,6 +48,7 @@ model User {
 
   goals               Goal[]
   tasks               Task[]
+  auditEvents         TaskAuditEvent[]
   thoughts            Thought[]
   focusPolicies       FocusLockPolicy[]
   focusExceptions     FocusLockException[]
@@ -69,25 +78,49 @@ model Goal {
 }
 
 model Task {
-  id                  String     @id @default(uuid())
-  userId              String
-  goalId              String?
-  title               String
-  description         String?
-  scheduledDate       String     // YYYY-MM-DD
-  status              TaskStatus @default(PLANNED)
-  isRequiredForUnlock Boolean    @default(false)
-  estimatedMinutes    Int?
-  completedAt         DateTime?
-  rescheduledToDate   String?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  id                    String     @id @default(uuid())
+  userId                String
+  goalId                String?
+  title                 String
+  description           String?
+  originalScheduledDate String     // YYYY-MM-DD: immutable original planned date
+  scheduledDate         String     // YYYY-MM-DD: current active scheduled date
+  status                TaskStatus @default(PLANNED)
+  isRequiredForUnlock   Boolean    @default(false)
+  estimatedMinutes      Int?
+  completedAt           DateTime?  // Exact completion timestamp
+  reopenedAt            DateTime?  // Exact reopening timestamp
+  rescheduleCount       Int        @default(0)
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
-  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  goal                Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal                  Goal?            @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  auditEvents           TaskAuditEvent[]
 
   @@index([userId, scheduledDate])
+  @@index([userId, originalScheduledDate])
   @@map("tasks")
+}
+
+model TaskAuditEvent {
+  id             String             @id @default(uuid())
+  taskId         String
+  userId         String
+  eventType      TaskAuditEventType
+  previousStatus TaskStatus?
+  newStatus      TaskStatus?
+  previousDate   String?            // YYYY-MM-DD
+  newDate        String?            // YYYY-MM-DD
+  reason         String?
+  createdAt      DateTime           @default(now())
+
+  task           Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId, createdAt])
+  @@map("task_audit_events")
 }
 
 model Thought {
@@ -150,10 +183,12 @@ model DailyReport {
   id                    String   @id @default(uuid())
   userId                String
   date                  String   // YYYY-MM-DD
+  timezone              String   @default("UTC")
   totalTasks            Int      @default(0)
   completedCount        Int      @default(0)
   pendingCount          Int      @default(0)
   rescheduledCount      Int      @default(0)
+  reopenedCount         Int      @default(0)
   plannedCount          Int      @default(0)
   completionRatePercent Float    @default(0.0)
   thoughtsLoggedCount   Int      @default(0)
