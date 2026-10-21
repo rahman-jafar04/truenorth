@@ -6,7 +6,9 @@ import {
   TaskResponse,
   CreateTaskInput,
   UpdateTaskInput,
-  DailyReport
+  DailyReport,
+  UserProfile,
+  UpdateProfileInput
 } from "@truenorth/shared";
 
 const API_BASE_URL =
@@ -29,6 +31,10 @@ class ApiClient {
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
+  }
+
+  getAuthToken(): string | null {
+    return this.authToken;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -65,6 +71,25 @@ class ApiClient {
   // System Health
   async getHealth(): Promise<{ status: string; service: string; version: string; uptimeSeconds: number }> {
     return this.request("/health");
+  }
+
+  // Profile & Personal Values
+  async getProfile(): Promise<{ data: UserProfile }> {
+    return this.request("/profile");
+  }
+
+  async updateProfile(input: UpdateProfileInput): Promise<{ data: UserProfile }> {
+    return this.request("/profile", {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    });
+  }
+
+  async syncUser(displayName?: string): Promise<{ data: UserProfile }> {
+    return this.request("/profile/sync", {
+      method: "POST",
+      body: JSON.stringify({ displayName })
+    });
   }
 
   // Thoughts & AI Guidance

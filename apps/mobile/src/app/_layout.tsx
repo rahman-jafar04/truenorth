@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { theme } from "../theme";
+import { AuthProvider } from "../hooks/useAuth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,31 +19,39 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: theme.colors.background
-            },
-            headerTintColor: theme.colors.textPrimary,
-            contentStyle: {
-              backgroundColor: theme.colors.background
-            }
-          }}
-        >
-          <Stack.Screen
-            name="index"
-            options={{
-              headerShown: false
+        <AuthProvider>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerStyle: {
+                backgroundColor: theme.colors.background
+              },
+              headerTintColor: theme.colors.textPrimary,
+              contentStyle: {
+                backgroundColor: theme.colors.background
+              }
             }}
-          />
-          <Stack.Screen
-            name="(app)"
-            options={{
-              headerShown: false
-            }}
-          />
-        </Stack>
+          >
+            <Stack.Screen
+              name="index"
+              options={{
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name="(auth)"
+              options={{
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name="(app)"
+              options={{
+                headerShown: false
+              }}
+            />
+          </Stack>
+        </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

@@ -12,8 +12,11 @@ import { FocusLockBridge, FocusTimerSession } from "../../native/FocusLockBridge
 import { apiClient } from "../../services/apiClient";
 import { PlatformCapabilities } from "@truenorth/shared";
 
+import { useAuth } from "../../hooks/useAuth";
+
 export default function DashboardScreen() {
   const router = useRouter();
+  const { user, profile } = useAuth();
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [platformCaps, setPlatformCaps] = useState<PlatformCapabilities | null>(null);
 
@@ -26,7 +29,9 @@ export default function DashboardScreen() {
   });
   const [selectedPresetMinutes, setSelectedPresetMinutes] = useState(25);
 
-  const personalValues = ["Diligence", "Integrity", "Deep Focus"];
+  const personalValues = profile?.personalValues || ["Diligence", "Integrity", "Deep Focus"];
+  const displayName = profile?.displayName || user?.displayName || user?.email?.split("@")[0] || "Seeker";
+
   const [todayTasks, setTodayTasks] = useState([
     { id: "1", title: "Complete System Architecture RFC", completed: true, required: true },
     { id: "2", title: "Review Goal Alignment with Faith Mode", completed: false, required: true },
@@ -104,15 +109,17 @@ export default function DashboardScreen() {
             Backend: {apiOnline === null ? "Connecting..." : apiOnline ? "Connected (Express API :4000)" : "Offline (Local Prototype)"}
           </Text>
         </View>
-        <Text style={styles.prototypeNotice}>PHASE 1 FOUNDATION</Text>
+        <Text style={styles.prototypeNotice}>PHASE 2 AUTH & VALUES</Text>
       </View>
 
       {/* User Values & Daily Compass */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
-          <Text style={styles.greeting}>Daily Compass</Text>
+          <Text style={styles.greeting}>Welcome, {displayName}</Text>
           <View style={styles.prototypeChip}>
-            <Text style={styles.prototypeChipText}>PROTOTYPE VALUES</Text>
+            <Text style={styles.prototypeChipText}>
+              {profile ? "LIVE VALUES" : "DEFAULT VALUES"}
+            </Text>
           </View>
         </View>
         <Text style={styles.subgreeting}>Your personal north star virtues for today:</Text>
