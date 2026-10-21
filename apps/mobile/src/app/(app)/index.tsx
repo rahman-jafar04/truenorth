@@ -51,7 +51,7 @@ export default function DashboardScreen() {
 
   // Timer countdown ticker
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (timerSession.isActive && timerSession.remainingSeconds > 0) {
       interval = setInterval(() => {
         setTimerSession((prev) => {

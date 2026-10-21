@@ -57,7 +57,7 @@ export default function SettingsScreen() {
 
   // Ticking effect for active timer
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (timerActive && remainingSeconds > 0) {
       interval = setInterval(() => {
         setRemainingSeconds((prev) => Math.max(0, prev - 1));
