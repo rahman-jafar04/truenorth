@@ -11,7 +11,10 @@ import {
   CalendarAnalytics,
   UserProfile,
   UpdateProfileInput,
-  ThoughtRecord
+  ThoughtRecord,
+  FocusLockPolicy,
+  RequestExceptionInput,
+  FocusLockExceptionResponse
 } from "@truenorth/shared";
 
 const API_BASE_URL =
@@ -221,6 +224,29 @@ class ApiClient {
     if (timezone) params.append("timezone", timezone);
     const query = params.toString() ? `?${params.toString()}` : "";
     return this.request(`/reports/calendar${query}`);
+  }
+
+  // Focus Lock
+  async getFocusLockPolicy(): Promise<{ data: FocusLockPolicy }> {
+    return this.request("/focus-lock/policy");
+  }
+
+  async updateFocusLockPolicy(input: Partial<FocusLockPolicy>): Promise<{ data: FocusLockPolicy }> {
+    return this.request("/focus-lock/policy", {
+      method: "PUT",
+      body: JSON.stringify(input)
+    });
+  }
+
+  async requestFocusLockException(input: RequestExceptionInput): Promise<{ data: FocusLockExceptionResponse }> {
+    return this.request("/focus-lock/exceptions", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  }
+
+  async getActiveFocusLockException(): Promise<{ data: FocusLockExceptionResponse | null }> {
+    return this.request("/focus-lock/exceptions/active");
   }
 }
 
