@@ -3,6 +3,7 @@ import {
   SubmitThoughtInput,
   GoalResponse,
   CreateGoalInput,
+  UpdateGoalInput,
   TaskResponse,
   CreateTaskInput,
   UpdateTaskInput,
@@ -112,6 +113,19 @@ class ApiClient {
     });
   }
 
+  async updateGoal(goalId: string, input: UpdateGoalInput): Promise<{ data: GoalResponse }> {
+    return this.request(`/goals/${goalId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    });
+  }
+
+  async deleteGoal(goalId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/goals/${goalId}`, {
+      method: "DELETE"
+    });
+  }
+
   // Tasks
   async getTasks(date?: string): Promise<{ data: TaskResponse[] }> {
     const query = date ? `?date=${encodeURIComponent(date)}` : "";
@@ -132,10 +146,38 @@ class ApiClient {
     });
   }
 
+  async completeTask(taskId: string): Promise<{ data: TaskResponse }> {
+    return this.request(`/tasks/${taskId}/complete`, {
+      method: "POST"
+    });
+  }
+
+  async reopenTask(taskId: string, reason?: string): Promise<{ data: TaskResponse }> {
+    return this.request(`/tasks/${taskId}/reopen`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    });
+  }
+
+  async rescheduleTask(taskId: string, newDate: string, reason: string): Promise<{ data: TaskResponse }> {
+    return this.request(`/tasks/${taskId}/reschedule`, {
+      method: "POST",
+      body: JSON.stringify({ newDate, reason })
+    });
+  }
+
+  async deleteTask(taskId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/tasks/${taskId}`, {
+      method: "DELETE"
+    });
+  }
+
   // Reports
-  async getDailyReport(date: string): Promise<{ data: DailyReport }> {
-    return this.request(`/reports/daily?date=${encodeURIComponent(date)}`);
+  async getDailyReport(date: string, timezone?: string): Promise<{ data: DailyReport }> {
+    const tzParam = timezone ? `&timezone=${encodeURIComponent(timezone)}` : "";
+    return this.request(`/reports/daily?date=${encodeURIComponent(date)}${tzParam}`);
   }
 }
 
 export const apiClient = new ApiClient();
+

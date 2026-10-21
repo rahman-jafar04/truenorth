@@ -10,15 +10,21 @@ import { useRouter } from "expo-router";
 import { theme } from "../../theme";
 import { FocusLockBridge, FocusTimerSession } from "../../native/FocusLockBridge";
 import { apiClient } from "../../services/apiClient";
-import { PlatformCapabilities } from "@truenorth/shared";
+import { PlatformCapabilities, TaskResponse } from "@truenorth/shared";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useTasks, useCompleteTask, useReopenTask } from "../../hooks/useTasks";
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [platformCaps, setPlatformCaps] = useState<PlatformCapabilities | null>(null);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const { data: todayTasks = [], isLoading: tasksLoading } = useTasks(todayStr);
+  const completeTaskMutation = useCompleteTask();
+  const reopenTaskMutation = useReopenTask();
 
   // In-App Focus Timer state
   const [timerSession, setTimerSession] = useState<FocusTimerSession>({
@@ -32,11 +38,6 @@ export default function DashboardScreen() {
   const personalValues = profile?.personalValues || ["Diligence", "Integrity", "Deep Focus"];
   const displayName = profile?.displayName || user?.displayName || user?.email?.split("@")[0] || "Seeker";
 
-  const [todayTasks, setTodayTasks] = useState([
-    { id: "1", title: "Complete System Architecture RFC", completed: true, required: true },
-    { id: "2", title: "Review Goal Alignment with Faith Mode", completed: false, required: true },
-    { id: "3", title: "Exercise & Physical Endurance (30m)", completed: false, required: false }
-  ]);
 
   useEffect(() => {
     apiClient
@@ -88,10 +89,15 @@ export default function DashboardScreen() {
     });
   }
 
-  function toggleTask(id: string) {
-    setTodayTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
+  async function toggleTask(task: TaskResponse) {
+    if (task.status === "COMPLETED") {
+      await reopenTaskMutation.mutateAsync({
+        taskId: task.id,
+        reason: "User toggled off in dashboard"
+      });
+    } else {
+      await completeTaskMutation.mutateAsync(task.id);
+    }
   }
 
   return (
@@ -109,7 +115,7 @@ export default function DashboardScreen() {
             Backend: {apiOnline === null ? "Connecting..." : apiOnline ? "Connected (Express API :4000)" : "Offline (Local Prototype)"}
           </Text>
         </View>
-        <Text style={styles.prototypeNotice}>PHASE 2 AUTH & VALUES</Text>
+        <Text style={styles.prototypeNotice}>PHASE 3 GOALS & TASKS</Text>
       </View>
 
       {/* User Values & Daily Compass */}
@@ -226,29 +232,46 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {todayTasks.map((task) => (
-          <TouchableOpacity
-            key={task.id}
-            style={styles.taskItem}
-            onPress={() => toggleTask(task.id)}
-          >
-            <Text style={styles.taskCheckbox}>{task.completed ? "☑" : "☐"}</Text>
-            <View style={styles.taskInfo}>
-              <Text
-                style={[
-                  styles.taskTitle,
-                  task.completed && styles.taskTitleCompleted
-                ]}
-              >
-                {task.title}
+        {todayTasks.length === 0 ? (
+          <View style={{ paddingVertical: 12, alignItems: "center" }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 8 }}>
+              No tasks planned for today.
+            </Text>
+            <TouchableOpacity
+              style={[styles.presetBtn, styles.presetBtnActive]}
+              onPress={() => router.push("/(app)/tasks")}
+            >
+              <Text style={styles.presetTextActive}>+ Plan Today's Tasks</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          todayTasks.slice(0, 5).map((task) => (
+            <TouchableOpacity
+              key={task.id}
+              style={styles.taskItem}
+              onPress={() => toggleTask(task)}
+            >
+              <Text style={styles.taskCheckbox}>
+                {task.status === "COMPLETED" ? "☑" : "☐"}
               </Text>
-              {task.required && (
-                <Text style={styles.requiredBadge}>Required for Focus Unlock</Text>
-              )}
-            </View>
-          </TouchableOpacity>
-        ))}
+              <View style={styles.taskInfo}>
+                <Text
+                  style={[
+                    styles.taskTitle,
+                    task.status === "COMPLETED" && styles.taskTitleCompleted
+                  ]}
+                >
+                  {task.title}
+                </Text>
+                {task.isRequiredForUnlock && (
+                  <Text style={styles.requiredBadge}>Required for Focus Unlock</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </View>
+
 
       {/* Quick Navigation Cards */}
       <View style={styles.actionsRow}>

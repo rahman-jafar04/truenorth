@@ -10,7 +10,7 @@ export const CreateGoalSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
   description: z.string().trim().max(1000).optional(),
   priority: GoalPriorityEnum.default("MEDIUM"),
-  targetDate: z.string().datetime().optional().nullable(),
+  targetDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional().nullable(),
   category: z.string().trim().max(50).optional()
 });
 

@@ -4,28 +4,36 @@ import {
   Text,
   View,
   ScrollView,
-  TouchableOpacity
+  TouchableOpacity,
+  ActivityIndicator
 } from "react-native";
 import { theme } from "../../theme";
+import { useDailyReport } from "../../hooks/useTasks";
 
 export default function DailyReportScreen() {
-  const [reportDate, setReportDate] = useState("2026-10-12");
+  const today = new Date();
+  const d0 = today.toISOString().slice(0, 10);
+  const d1 = new Date(today.getTime() - 86400000).toISOString().slice(0, 10);
+  const d2 = new Date(today.getTime() - 86400000 * 2).toISOString().slice(0, 10);
 
-  const availableDates = ["2026-10-13", "2026-10-12", "2026-10-11"];
+  const availableDates = [d0, d1, d2];
+  const [reportDate, setReportDate] = useState(d0);
 
-  // Mock report adhering strictly to DailyReportSchema
-  const reportData = {
+  const { data: report, isLoading, isError, refetch } = useDailyReport(reportDate);
+
+  const reportData = report || {
     date: reportDate,
     timezone: "UTC",
-    totalTasks: 4,
-    plannedCount: 4,
-    completedCount: 3,
+    totalTasks: 0,
+    plannedCount: 0,
+    completedCount: 0,
     pendingCount: 0,
-    rescheduledCount: 1,
+    rescheduledCount: 0,
     reopenedCount: 0,
-    completionRatePercent: 75,
-    thoughtsLoggedCount: 2,
-    focusLockSessionsCount: 3
+    completionRatePercent: 0,
+    tasks: [],
+    thoughtsLoggedCount: 0,
+    focusLockSessionsCount: 0
   };
 
   return (
@@ -47,59 +55,75 @@ export default function DailyReportScreen() {
                 reportDate === date && styles.datePillTextActive
               ]}
             >
-              {date === "2026-10-13" ? "Today" : date}
+              {date === d0 ? "Today" : date === d1 ? "Yesterday" : date}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Completion Rate Scorecard */}
-      <View style={styles.heroScorecard}>
-        <Text style={styles.scoreTitle}>Completion Rate</Text>
-        <Text style={styles.scoreNumber}>{reportData.completionRatePercent}%</Text>
-        <Text style={styles.scoreSub}>
-          {reportData.completedCount} of {reportData.totalTasks} planned tasks completed
-        </Text>
-      </View>
-
-      {/* Metrics Grid */}
-      <View style={styles.metricsGrid}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricVal}>{reportData.completedCount}</Text>
-          <Text style={[styles.metricLabel, { color: theme.colors.success }]}>
-            Completed
-          </Text>
+      {isLoading ? (
+        <View style={styles.centerBox}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Calculating historical day audit report...</Text>
         </View>
-
-        <View style={styles.metricCard}>
-          <Text style={styles.metricVal}>{reportData.rescheduledCount}</Text>
-          <Text style={[styles.metricLabel, { color: theme.colors.accent }]}>
-            Rescheduled
-          </Text>
+      ) : isError ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>Could not generate report for {reportDate}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
+      ) : (
+        <>
+          {/* Completion Rate Scorecard */}
+          <View style={styles.heroScorecard}>
+            <Text style={styles.scoreTitle}>Completion Rate</Text>
+            <Text style={styles.scoreNumber}>{reportData.completionRatePercent}%</Text>
+            <Text style={styles.scoreSub}>
+              {reportData.completedCount} of {reportData.plannedCount} planned tasks completed
+            </Text>
+          </View>
 
-        <View style={styles.metricCard}>
-          <Text style={styles.metricVal}>{reportData.pendingCount}</Text>
-          <Text style={[styles.metricLabel, { color: theme.colors.warning }]}>
-            Pending
-          </Text>
-        </View>
+          {/* Metrics Grid */}
+          <View style={styles.metricsGrid}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricVal}>{reportData.completedCount}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.success }]}>
+                Completed
+              </Text>
+            </View>
 
-        <View style={styles.metricCard}>
-          <Text style={styles.metricVal}>{reportData.focusLockSessionsCount}</Text>
-          <Text style={[styles.metricLabel, { color: theme.colors.primary }]}>
-            Focus Sessions
-          </Text>
-        </View>
-      </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricVal}>{reportData.rescheduledCount}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.accent }]}>
+                Rescheduled
+              </Text>
+            </View>
 
-      {/* Audit Model Integrity Notice */}
-      <View style={styles.integrityCard}>
-        <Text style={styles.integrityTitle}>Immutable Historical Record</Text>
-        <Text style={styles.integrityText}>
-          This review is calculated directly from the immutable task audit log. Rescheduling tasks today does not rewrite yesterday's 75% rate.
-        </Text>
-      </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricVal}>{reportData.pendingCount}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.warning }]}>
+                Pending
+              </Text>
+            </View>
+
+            <View style={styles.metricCard}>
+              <Text style={styles.metricVal}>{reportData.reopenedCount}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.textMuted }]}>
+                Reopened
+              </Text>
+            </View>
+          </View>
+
+          {/* Audit Model Integrity Notice */}
+          <View style={styles.integrityCard}>
+            <Text style={styles.integrityTitle}>Immutable Historical Record</Text>
+            <Text style={styles.integrityText}>
+              This review is calculated directly from the immutable task audit log. Rescheduling tasks today does not rewrite yesterday’s historical completion rate.
+            </Text>
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -137,6 +161,40 @@ const styles = StyleSheet.create({
   },
   datePillTextActive: {
     color: "#0F172A"
+  },
+  centerBox: {
+    padding: theme.spacing.xl,
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  loadingText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13
+  },
+  errorBox: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    gap: theme.spacing.xs
+  },
+  errorText: {
+    color: theme.colors.error,
+    fontWeight: "700",
+    fontSize: 13
+  },
+  retryBtn: {
+    backgroundColor: theme.colors.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder
+  },
+  retryBtnText: {
+    color: theme.colors.textPrimary,
+    fontWeight: "600",
+    fontSize: 12
   },
   heroScorecard: {
     backgroundColor: theme.colors.surface,

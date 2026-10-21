@@ -6,64 +6,45 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal
+  Modal,
+  ActivityIndicator
 } from "react-native";
 import { theme } from "../../theme";
-import { GoalPriority, GoalStatus } from "@truenorth/shared";
-
-interface MobileGoal {
-  id: string;
-  title: string;
-  description?: string;
-  priority: GoalPriority;
-  status: GoalStatus;
-  targetDate?: string;
-  category: string;
-}
+import { GoalPriority, GoalStatus, GoalResponse } from "@truenorth/shared";
+import { useGoals, useCreateGoal } from "../../hooks/useGoals";
 
 export default function GoalsScreen() {
-  const [goals, setGoals] = useState<MobileGoal[]>([
-    {
-      id: "g1",
-      title: "Master Mobile Engineering & Systems Architecture",
-      description: "Build robust, verified cross-platform apps with rigorous safety boundaries.",
-      priority: "CRITICAL",
-      status: "ACTIVE",
-      targetDate: "2026-12-31",
-      category: "Career & Craft"
-    },
-    {
-      id: "g2",
-      title: "Cultivate Spiritual & Personal Discipline",
-      description: "Daily self-reflection, integrity, and adherence to personal values.",
-      priority: "HIGH",
-      status: "ACTIVE",
-      targetDate: "2026-11-30",
-      category: "Personal Growth"
-    }
-  ]);
+  const { data: goals = [], isLoading, isError, refetch } = useGoals();
+  const createGoalMutation = useCreateGoal();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const [descInput, setDescInput] = useState("");
+  const [priorityInput, setPriorityInput] = useState<GoalPriority>("MEDIUM");
   const [categoryInput, setCategoryInput] = useState("Productivity");
+  const [targetDateInput, setTargetDateInput] = useState("");
 
-  function handleCreateGoal() {
+  async function handleCreateGoal() {
     if (!titleInput.trim()) return;
 
-    const newGoal: MobileGoal = {
-      id: `g-${Date.now()}`,
-      title: titleInput.trim(),
-      description: descInput.trim() || undefined,
-      priority: "MEDIUM",
-      status: "ACTIVE",
-      category: categoryInput
-    };
+    try {
+      await createGoalMutation.mutateAsync({
+        title: titleInput.trim(),
+        description: descInput.trim() || undefined,
+        priority: priorityInput,
+        category: categoryInput.trim() || undefined,
+        targetDate: targetDateInput.trim() || undefined
+      });
 
-    setGoals((prev) => [newGoal, ...prev]);
-    setTitleInput("");
-    setDescInput("");
-    setModalVisible(false);
+      setTitleInput("");
+      setDescInput("");
+      setPriorityInput("MEDIUM");
+      setCategoryInput("Productivity");
+      setTargetDateInput("");
+      setModalVisible(false);
+    } catch {
+      // Error handled by mutation state
+    }
   }
 
   function getPriorityColor(priority: GoalPriority) {
@@ -95,40 +76,68 @@ export default function GoalsScreen() {
           </TouchableOpacity>
         </View>
 
-        {goals.map((goal) => (
-          <View key={goal.id} style={styles.goalCard}>
-            <View style={styles.goalHeader}>
-              <View
-                style={[
-                  styles.priorityBadge,
-                  { backgroundColor: `${getPriorityColor(goal.priority)}22` }
-                ]}
-              >
-                <Text
+        {isLoading ? (
+          <View style={styles.centerBox}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Loading your core goals...</Text>
+          </View>
+        ) : isError ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorTitle}>Could not load goals</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : goals.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>🎯</Text>
+            <Text style={styles.emptyTitle}>No Goals Defined Yet</Text>
+            <Text style={styles.emptyBody}>
+              TrueNorth anchors your daily tasks and thoughts to your core long-term goals. Create your first goal to begin.
+            </Text>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => setModalVisible(true)}
+            >
+              <Text style={styles.addBtnText}>+ Create First Goal</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          goals.map((goal) => (
+            <View key={goal.id} style={styles.goalCard}>
+              <View style={styles.goalHeader}>
+                <View
                   style={[
-                    styles.priorityText,
-                    { color: getPriorityColor(goal.priority) }
+                    styles.priorityBadge,
+                    { backgroundColor: `${getPriorityColor(goal.priority)}22` }
                   ]}
                 >
-                  {goal.priority}
-                </Text>
+                  <Text
+                    style={[
+                      styles.priorityText,
+                      { color: getPriorityColor(goal.priority) }
+                    ]}
+                  >
+                    {goal.priority}
+                  </Text>
+                </View>
+                <Text style={styles.categoryText}>{goal.category || "General"}</Text>
               </View>
-              <Text style={styles.categoryText}>{goal.category}</Text>
-            </View>
 
-            <Text style={styles.goalTitle}>{goal.title}</Text>
-            {goal.description && (
-              <Text style={styles.goalDescription}>{goal.description}</Text>
-            )}
+              <Text style={styles.goalTitle}>{goal.title}</Text>
+              {goal.description && (
+                <Text style={styles.goalDescription}>{goal.description}</Text>
+              )}
 
-            {goal.targetDate && (
               <View style={styles.dateRow}>
-                <Text style={styles.dateLabel}>Target: {goal.targetDate}</Text>
-                <Text style={styles.statusActive}>● ACTIVE</Text>
+                <Text style={styles.dateLabel}>
+                  {goal.targetDate ? `Target: ${goal.targetDate}` : "Ongoing"}
+                </Text>
+                <Text style={styles.statusActive}>● {goal.status}</Text>
               </View>
-            )}
-          </View>
-        ))}
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {/* Add Goal Modal */}
@@ -161,6 +170,32 @@ export default function GoalsScreen() {
               onChangeText={setDescInput}
             />
 
+            <Text style={styles.label}>Priority:</Text>
+            <View style={styles.prioritySelector}>
+              {(["LOW", "MEDIUM", "HIGH", "CRITICAL"] as GoalPriority[]).map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[
+                    styles.priorityChoice,
+                    priorityInput === p && {
+                      backgroundColor: `${getPriorityColor(p)}33`,
+                      borderColor: getPriorityColor(p)
+                    }
+                  ]}
+                  onPress={() => setPriorityInput(p)}
+                >
+                  <Text
+                    style={[
+                      styles.priorityChoiceText,
+                      priorityInput === p && { color: getPriorityColor(p), fontWeight: "800" }
+                    ]}
+                  >
+                    {p}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <Text style={styles.label}>Category:</Text>
             <TextInput
               style={styles.input}
@@ -168,6 +203,21 @@ export default function GoalsScreen() {
               onChangeText={setCategoryInput}
               placeholderTextColor={theme.colors.textMuted}
             />
+
+            <Text style={styles.label}>Target Date (YYYY-MM-DD, optional):</Text>
+            <TextInput
+              style={styles.input}
+              value={targetDateInput}
+              onChangeText={setTargetDateInput}
+              placeholder="2026-12-31"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+
+            {createGoalMutation.isError && (
+              <Text style={styles.mutationError}>
+                Failed to create goal: {(createGoalMutation.error as Error).message}
+              </Text>
+            )}
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -177,11 +227,18 @@ export default function GoalsScreen() {
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.saveBtn, !titleInput.trim() && styles.disabledBtn]}
-                disabled={!titleInput.trim()}
+                style={[
+                  styles.saveBtn,
+                  (!titleInput.trim() || createGoalMutation.isPending) && styles.disabledBtn
+                ]}
+                disabled={!titleInput.trim() || createGoalMutation.isPending}
                 onPress={handleCreateGoal}
               >
-                <Text style={styles.saveText}>Create Goal</Text>
+                {createGoalMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#0F172A" />
+                ) : (
+                  <Text style={styles.saveText}>Create Goal</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -219,12 +276,72 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: theme.borderRadius.md
+    borderRadius: theme.borderRadius.md,
+    alignSelf: "flex-start"
   },
   addBtnText: {
     color: "#0F172A",
     fontWeight: "700",
     fontSize: 13
+  },
+  centerBox: {
+    padding: theme.spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.sm
+  },
+  loadingText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13
+  },
+  errorBox: {
+    padding: theme.spacing.lg,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  errorTitle: {
+    color: theme.colors.error,
+    fontWeight: "700",
+    fontSize: 14
+  },
+  retryBtn: {
+    backgroundColor: theme.colors.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder
+  },
+  retryBtnText: {
+    color: theme.colors.textPrimary,
+    fontWeight: "600",
+    fontSize: 12
+  },
+  emptyCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.xl,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder,
+    gap: theme.spacing.sm
+  },
+  emptyIcon: {
+    fontSize: 36
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.textPrimary
+  },
+  emptyBody: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: theme.spacing.sm
   },
   goalCard: {
     backgroundColor: theme.colors.surface,
@@ -317,8 +434,31 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md
   },
   textArea: {
-    height: 70,
+    height: 60,
     textAlignVertical: "top"
+  },
+  prioritySelector: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: theme.spacing.md
+  },
+  priorityChoice: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder,
+    alignItems: "center"
+  },
+  priorityChoiceText: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    fontWeight: "600"
+  },
+  mutationError: {
+    color: theme.colors.error,
+    fontSize: 12,
+    marginBottom: theme.spacing.sm
   },
   modalButtons: {
     flexDirection: "row",
