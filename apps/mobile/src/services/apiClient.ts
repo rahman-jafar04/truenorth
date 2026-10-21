@@ -17,8 +17,21 @@ import {
   FocusLockExceptionResponse
 } from "@truenorth/shared";
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:4000/api";
+import Constants from "expo-constants";
+
+export function getApiBaseUrl(): string {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(":")[0];
+    return `http://${host}:4000/api`;
+  }
+  return "http://localhost:4000/api";
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export class ApiError extends Error {
   constructor(
@@ -59,7 +72,7 @@ class ApiClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${getApiBaseUrl()}${endpoint}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>)
