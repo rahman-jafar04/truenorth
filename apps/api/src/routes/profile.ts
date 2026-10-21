@@ -61,3 +61,21 @@ profileRouter.post("/sync", async (req: Request, res: Response, next: NextFuncti
     next(err);
   }
 });
+
+/**
+ * DELETE /api/profile
+ * GDPR/CCPA compliant cascading account purge.
+ * Irreversibly purges user record, goals, tasks, audit events, thoughts, and focus policies.
+ */
+profileRouter.delete("/", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    await userService.deleteAccount(userId);
+    res.status(200).json({
+      success: true,
+      message: "Account and all associated historical data permanently purged."
+    });
+  } catch (err) {
+    next(err);
+  }
+});

@@ -114,6 +114,12 @@ class ApiClient {
     });
   }
 
+  async deleteAccount(): Promise<{ success: boolean; message: string }> {
+    return this.request("/profile", {
+      method: "DELETE"
+    });
+  }
+
   // Thoughts & AI Guidance
   async analyzeThought(input: SubmitThoughtInput): Promise<{ data: AiGuidanceResponse; thought?: ThoughtRecord }> {
     return this.request("/thoughts/analyze", {

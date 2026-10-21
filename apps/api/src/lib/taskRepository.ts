@@ -306,6 +306,14 @@ export class TaskRepository {
     return true;
   }
 
+  async purgeByUserId(userId: string): Promise<void> {
+    for (const [id, task] of inMemoryTasks.entries()) {
+      if (task.userId === userId) {
+        inMemoryTasks.delete(id);
+      }
+    }
+  }
+
   clearInMemory(): void {
     inMemoryTasks.clear();
   }

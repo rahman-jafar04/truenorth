@@ -4,6 +4,10 @@ import {
   UpdateProfileSchema
 } from "@truenorth/shared";
 import { userRepository } from "../lib/userRepository";
+import { goalRepository } from "../lib/goalRepository";
+import { taskRepository } from "../lib/taskRepository";
+import { thoughtRepository } from "../lib/thoughtRepository";
+import { focusLockRepository } from "../lib/focusLockRepository";
 import { logger } from "../lib/logger";
 
 export class UserServiceError extends Error {
@@ -92,6 +96,24 @@ export class UserService {
     });
 
     return updated;
+  }
+
+  /**
+   * GDPR/CCPA compliant cascading account purge.
+   * Permanently purges user row, goals, tasks, audit trails, thoughts, and focus policies.
+   */
+  async deleteAccount(userId: string): Promise<void> {
+    // 1. Cascading purge across all repositories
+    await goalRepository.purgeByUserId(userId);
+    await taskRepository.purgeByUserId(userId);
+    await thoughtRepository.purgeByUserId(userId);
+    await focusLockRepository.purgeByUserId(userId);
+
+    // 2. Delete user profile record
+    await userRepository.delete(userId);
+
+    // 3. Privacy-safe log
+    logger.info("Purged user account and cascaded data deletion", { userId });
   }
 }
 

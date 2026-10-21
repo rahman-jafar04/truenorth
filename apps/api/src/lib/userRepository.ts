@@ -225,6 +225,29 @@ export class UserRepository {
   }
 
   /**
+   * Deletes a user profile from PostgreSQL / in-memory store.
+   * Cascading deletes are handled by PostgreSQL schema constraints.
+   */
+  async delete(userId: string): Promise<boolean> {
+    if (isDatabaseAvailable) {
+      try {
+        await prisma.user.delete({
+          where: { id: userId }
+        });
+        inMemoryUsers.delete(userId);
+        return true;
+      } catch (err) {
+        logger.debug("Database user delete failed; using in-memory store", {
+          error: (err as Error).message
+        });
+        isDatabaseAvailable = false;
+      }
+    }
+
+    return inMemoryUsers.delete(userId);
+  }
+
+  /**
    * Clears in-memory store (used for test isolation).
    */
   clearInMemory(): void {

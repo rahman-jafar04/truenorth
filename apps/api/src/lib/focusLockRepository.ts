@@ -231,6 +231,11 @@ export class FocusLockRepository {
     return null;
   }
 
+  async purgeByUserId(userId: string): Promise<void> {
+    inMemoryPolicies.delete(userId);
+    inMemoryExceptions.delete(userId);
+  }
+
   clearInMemory(): void {
     inMemoryPolicies.clear();
     inMemoryExceptions.clear();

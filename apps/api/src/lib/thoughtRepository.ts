@@ -163,6 +163,14 @@ export class ThoughtRepository {
     return true;
   }
 
+  async purgeByUserId(userId: string): Promise<void> {
+    for (const [id, thought] of inMemoryThoughts.entries()) {
+      if (thought.userId === userId) {
+        inMemoryThoughts.delete(id);
+      }
+    }
+  }
+
   clearInMemory(): void {
     inMemoryThoughts.clear();
   }

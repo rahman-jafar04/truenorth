@@ -20,6 +20,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   updateProfile: (input: UpdateProfileInput) => Promise<boolean>;
   refreshProfile: () => Promise<void>;
+  deleteAccount: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -151,6 +152,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAccount = async (): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await apiClient.deleteAccount();
+      await supabaseAuthService.signOut();
+      apiClient.setAuthToken(null);
+      setUser(null);
+      setProfile(null);
+      return true;
+    } catch (err) {
+      setError((err as Error).message);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -162,7 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut,
         updateProfile,
-        refreshProfile
+        refreshProfile,
+        deleteAccount
       }}
     >
       {children}

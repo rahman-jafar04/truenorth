@@ -28,7 +28,7 @@ import {
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, profile, updateProfile, signOut, isLoading } = useAuth();
+  const { user, profile, updateProfile, signOut, deleteAccount, isLoading } = useAuth();
 
   const [newValueInput, setNewValueInput] = useState("");
   const [addingValue, setAddingValue] = useState(false);
@@ -216,8 +216,12 @@ export default function SettingsScreen() {
           text: "Delete Irreversibly",
           style: "destructive",
           onPress: async () => {
-            await signOut();
-            router.replace("/(auth)/login");
+            const success = await deleteAccount();
+            if (success) {
+              router.replace("/(auth)/login");
+            } else {
+              Alert.alert("Error", "Could not delete account. Please try again.");
+            }
           }
         }
       ]

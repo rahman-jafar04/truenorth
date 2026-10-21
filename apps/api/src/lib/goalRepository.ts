@@ -237,6 +237,14 @@ export class GoalRepository {
     return true;
   }
 
+  async purgeByUserId(userId: string): Promise<void> {
+    for (const [id, goal] of inMemoryGoals.entries()) {
+      if (goal.userId === userId) {
+        inMemoryGoals.delete(id);
+      }
+    }
+  }
+
   clearInMemory(): void {
     inMemoryGoals.clear();
   }
