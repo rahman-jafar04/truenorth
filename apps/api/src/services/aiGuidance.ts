@@ -5,6 +5,7 @@ import {
   NON_SHAMING_TONE_PRINCIPLES
 } from "@truenorth/shared";
 import { logger } from "../lib/logger";
+import { getLlmConfig } from "../config/env";
 
 export interface AnalyzeThoughtParams {
   thought: string;
@@ -166,13 +167,12 @@ function createSafeFallbackGuidance(params: AnalyzeThoughtParams, reason?: strin
 }
 
 /**
- * Calls a hosted LLM provider (OpenAI / Gemini / Anthropic compatible) when configured.
+ * Calls a hosted LLM provider (Groq / OpenAI compatible) when configured.
  */
 async function callHostedLlmProvider(params: AnalyzeThoughtParams): Promise<AiGuidanceResponse | null> {
-  const apiKey = process.env.LLM_API_KEY;
+  const { apiKey, endpoint, model, provider } = getLlmConfig();
   if (!apiKey) return null;
 
-  const model = process.env.LLM_MODEL || "gpt-4o-mini";
   const systemPrompt = buildSystemPrompt(params.faithModeEnabled, params.personalValues);
 
   const userMessage = params.goalTitle
@@ -180,7 +180,8 @@ async function callHostedLlmProvider(params: AnalyzeThoughtParams): Promise<AiGu
     : `Thought to analyze: "${params.thought}"`;
 
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    logger.info(`Calling hosted LLM provider (${provider}) at ${endpoint} with model ${model}`);
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -198,7 +199,8 @@ async function callHostedLlmProvider(params: AnalyzeThoughtParams): Promise<AiGu
     });
 
     if (!res.ok) {
-      logger.warn("Hosted LLM API returned non-200 status", { status: res.status });
+      const errText = await res.text().catch(() => "");
+      logger.warn(`Hosted LLM API returned non-200 status (${res.status})`, { provider, error: errText });
       return null;
     }
 
@@ -239,7 +241,8 @@ export async function analyzeThought(params: AnalyzeThoughtParams): Promise<AiGu
   });
 
   // Attempt live hosted LLM if configured
-  if (process.env.LLM_API_KEY) {
+  const { apiKey } = getLlmConfig();
+  if (apiKey) {
     const liveGuidance = await callHostedLlmProvider(params);
     if (liveGuidance) {
       return liveGuidance;
