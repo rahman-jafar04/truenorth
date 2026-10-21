@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,16 +8,23 @@ import {
   ActivityIndicator
 } from "react-native";
 import { theme } from "../../theme";
-import { useDailyReport } from "../../hooks/useTasks";
+import { useDailyReport } from "../../hooks/useReports";
+
+function getPastDates(daysCount: number = 7): string[] {
+  const dates: string[] = [];
+  const today = new Date();
+  for (let i = 0; i < daysCount; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
 
 export default function DailyReportScreen() {
-  const today = new Date();
-  const d0 = today.toISOString().slice(0, 10);
-  const d1 = new Date(today.getTime() - 86400000).toISOString().slice(0, 10);
-  const d2 = new Date(today.getTime() - 86400000 * 2).toISOString().slice(0, 10);
-
-  const availableDates = [d0, d1, d2];
-  const [reportDate, setReportDate] = useState(d0);
+  const pastDates = useMemo(() => getPastDates(7), []);
+  const todayIso = pastDates[0];
+  const [reportDate, setReportDate] = useState<string>(todayIso);
 
   const { data: report, isLoading, isError, refetch } = useDailyReport(reportDate);
 
@@ -40,7 +47,7 @@ export default function DailyReportScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Date Switcher */}
       <View style={styles.dateSelector}>
-        {availableDates.map((date) => (
+        {pastDates.map((date) => (
           <TouchableOpacity
             key={date}
             style={[
@@ -55,16 +62,22 @@ export default function DailyReportScreen() {
                 reportDate === date && styles.datePillTextActive
               ]}
             >
-              {date === d0 ? "Today" : date === d1 ? "Yesterday" : date}
+              {date === todayIso ? "Today" : date === pastDates[1] ? "Yest" : date.slice(5)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
+      <View style={styles.dateSubRow}>
+        <Text style={styles.dateSubText}>
+          Date: {reportDate} | Timezone: {reportData.timezone || "UTC"}
+        </Text>
+      </View>
+
       {isLoading ? (
         <View style={styles.centerBox}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Calculating historical day audit report...</Text>
+          <Text style={styles.loadingText}>Calculating immutable audit report...</Text>
         </View>
       ) : isError ? (
         <View style={styles.errorBox}>
@@ -77,7 +90,7 @@ export default function DailyReportScreen() {
         <>
           {/* Completion Rate Scorecard */}
           <View style={styles.heroScorecard}>
-            <Text style={styles.scoreTitle}>Completion Rate</Text>
+            <Text style={styles.scoreTitle}>DAILY COMPLETION RATE</Text>
             <Text style={styles.scoreNumber}>{reportData.completionRatePercent}%</Text>
             <Text style={styles.scoreSub}>
               {reportData.completedCount} of {reportData.plannedCount} planned tasks completed
@@ -113,13 +126,65 @@ export default function DailyReportScreen() {
                 Reopened
               </Text>
             </View>
+
+            <View style={styles.metricCard}>
+              <Text style={styles.metricVal}>{reportData.thoughtsLoggedCount}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.primary }]}>
+                Thoughts
+              </Text>
+            </View>
+
+            <View style={styles.metricCard}>
+              <Text style={styles.metricVal}>{reportData.focusLockSessionsCount}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.accent }]}>
+                Focus Sessions
+              </Text>
+            </View>
+          </View>
+
+          {/* Tasks Breakdown */}
+          <View style={styles.tasksCard}>
+            <Text style={styles.cardTitle}>Day Tasks ({reportData.tasks.length})</Text>
+            {reportData.tasks.length === 0 ? (
+              <Text style={styles.emptyText}>No tasks planned or active on this date.</Text>
+            ) : (
+              reportData.tasks.map((task) => (
+                <View key={task.id} style={styles.taskRow}>
+                  <View style={styles.taskMeta}>
+                    <Text
+                      style={[
+                        styles.taskStatusBadge,
+                        task.status === "COMPLETED"
+                          ? styles.statusCompleted
+                          : task.status === "RESCHEDULED"
+                          ? styles.statusRescheduled
+                          : styles.statusPlanned
+                      ]}
+                    >
+                      {task.status}
+                    </Text>
+                    <Text style={styles.taskTitle}>{task.title}</Text>
+                  </View>
+                  {task.completedAt && (
+                    <Text style={styles.taskTime}>
+                      Done at {new Date(task.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </Text>
+                  )}
+                  {task.rescheduledToDate && (
+                    <Text style={styles.taskRescheduledInfo}>
+                      &rarr; Moved to {task.rescheduledToDate}
+                    </Text>
+                  )}
+                </View>
+              ))
+            )}
           </View>
 
           {/* Audit Model Integrity Notice */}
           <View style={styles.integrityCard}>
             <Text style={styles.integrityTitle}>Immutable Historical Record</Text>
             <Text style={styles.integrityText}>
-              This review is calculated directly from the immutable task audit log. Rescheduling tasks today does not rewrite yesterday’s historical completion rate.
+              This review is calculated directly from immutable task audit logs and thought timestamps. Rescheduling or modifying tasks today never silently rewrites historical completion records.
             </Text>
           </View>
         </>
@@ -156,11 +221,18 @@ const styles = StyleSheet.create({
   },
   datePillText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700"
   },
   datePillTextActive: {
     color: "#0F172A"
+  },
+  dateSubRow: {
+    alignItems: "flex-end"
+  },
+  dateSubText: {
+    fontSize: 11,
+    color: theme.colors.textMuted
   },
   centerBox: {
     padding: theme.spacing.xl,
@@ -205,7 +277,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.surfaceBorder
   },
   scoreTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: theme.colors.textSecondary,
     letterSpacing: 1
@@ -227,7 +299,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    minWidth: "45%",
+    minWidth: "30%",
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
@@ -236,14 +308,79 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.surfaceBorder
   },
   metricVal: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
     color: theme.colors.textPrimary
   },
   metricLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     marginTop: 2
+  },
+  tasksCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.sm
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
+    fontSize: 13
+  },
+  taskRow: {
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.surfaceBorder
+  },
+  taskMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  taskStatusBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm
+  },
+  statusCompleted: {
+    backgroundColor: "rgba(16, 185, 129, 0.2)",
+    color: theme.colors.success
+  },
+  statusRescheduled: {
+    backgroundColor: "rgba(99, 102, 241, 0.2)",
+    color: theme.colors.accent
+  },
+  statusPlanned: {
+    backgroundColor: "rgba(148, 163, 184, 0.2)",
+    color: theme.colors.textSecondary
+  },
+  taskTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.textPrimary
+  },
+  taskTime: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: 4,
+    marginLeft: 2
+  },
+  taskRescheduledInfo: {
+    fontSize: 11,
+    color: theme.colors.accent,
+    marginTop: 4,
+    marginLeft: 2,
+    fontStyle: "italic"
   },
   integrityCard: {
     backgroundColor: "rgba(56, 189, 248, 0.08)",

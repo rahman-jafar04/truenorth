@@ -17,9 +17,9 @@ import {
   InMemoryTask,
   completeTask as completeTaskHistory,
   reopenTask as reopenTaskHistory,
-  rescheduleTask as rescheduleTaskHistory,
-  computeHistoricalDailyReport
+  rescheduleTask as rescheduleTaskHistory
 } from "./taskHistory";
+import { reportService } from "./reportService";
 import { logger } from "../lib/logger";
 
 export class TaskServiceError extends Error {
@@ -179,8 +179,7 @@ export class TaskService {
     date: string,
     timezone: string = "UTC"
   ): Promise<DailyReport> {
-    const allTasks = await taskRepository.findByUserId(userId);
-    return computeHistoricalDailyReport(allTasks, date, timezone);
+    return reportService.getDailyReport(userId, date, timezone);
   }
 }
 

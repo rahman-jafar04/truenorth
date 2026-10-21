@@ -4,7 +4,8 @@ import {
   TaskResponse,
   CreateTaskInput,
   UpdateTaskInput,
-  DailyReport
+  DailyReport,
+  CalendarAnalytics
 } from "@truenorth/shared";
 
 export function useTasks(date?: string) {
@@ -118,3 +119,18 @@ export function useDailyReport(date: string, timezone?: string) {
     }
   });
 }
+
+export function useCalendarAnalytics(
+  startDate?: string,
+  endDate?: string,
+  timezone?: string
+) {
+  return useQuery<CalendarAnalytics>({
+    queryKey: ["reports", "calendar", { startDate, endDate, timezone }],
+    queryFn: async () => {
+      const res = await apiClient.getCalendarAnalytics(startDate, endDate, timezone);
+      return res.data;
+    }
+  });
+}
+

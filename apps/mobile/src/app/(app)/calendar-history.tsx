@@ -11,12 +11,13 @@ import {
 import { theme } from "../../theme";
 import { useTasks } from "../../hooks/useTasks";
 import { useThoughts, useDeleteThought } from "../../hooks/useThoughts";
+import { useCalendarAnalytics } from "../../hooks/useReports";
 import { ThoughtRecord } from "@truenorth/shared";
 
 function getRecentDates(): string[] {
   const dates: string[] = [];
   const today = new Date();
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     dates.push(d.toISOString().slice(0, 10));
@@ -26,8 +27,14 @@ function getRecentDates(): string[] {
 
 export default function CalendarHistoryScreen() {
   const recentDates = useMemo(() => getRecentDates(), []);
-  const [selectedDate, setSelectedDate] = useState<string>(recentDates[0]);
+  const todayIso = recentDates[0];
+  const startDateIso = recentDates[recentDates.length - 1];
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
 
+  const { data: analytics, isLoading: analyticsLoading } = useCalendarAnalytics(
+    startDateIso,
+    todayIso
+  );
   const { data: tasks = [], isLoading: tasksLoading } = useTasks(selectedDate);
   const { data: thoughts = [], isLoading: thoughtsLoading } = useThoughts();
   const deleteThoughtMutation = useDeleteThought();
@@ -57,36 +64,70 @@ export default function CalendarHistoryScreen() {
     );
   }
 
-  const todayIso = recentDates[0];
+  // Lookup day summary from analytics
+  const daySummaryMap = useMemo(() => {
+    const map = new Map<string, { completionRatePercent: number; hasActivity: boolean; completedCount: number }>();
+    if (analytics?.days) {
+      for (const d of analytics.days) {
+        map.set(d.date, {
+          completionRatePercent: d.completionRatePercent,
+          hasActivity: d.hasActivity,
+          completedCount: d.completedCount
+        });
+      }
+    }
+    return map;
+  }, [analytics]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Analytics & Streak Banner */}
+      <View style={styles.streakBanner}>
+        <View style={styles.streakLeft}>
+          <Text style={styles.streakIcon}>🔥</Text>
+          <View>
+            <Text style={styles.streakTitle}>
+              {analytics?.currentStreakDays ?? 0} Day Streak
+            </Text>
+            <Text style={styles.streakSub}>
+              Best: {analytics?.bestStreakDays ?? 0} days | Completion: {analytics?.overallCompletionRate ?? 0}%
+            </Text>
+          </View>
+        </View>
+        {analyticsLoading && <ActivityIndicator size="small" color={theme.colors.primary} />}
+      </View>
+
       {/* Day Selector */}
       <View style={styles.dateSelectorRow}>
-        {recentDates.map((d) => (
-          <TouchableOpacity
-            key={d}
-            style={[
-              styles.dateTab,
-              selectedDate === d && styles.dateTabActive
-            ]}
-            onPress={() => setSelectedDate(d)}
-          >
-            <Text
+        {recentDates.map((d) => {
+          const summary = daySummaryMap.get(d);
+          const hasCompleted = (summary?.completedCount ?? 0) > 0;
+          return (
+            <TouchableOpacity
+              key={d}
               style={[
-                styles.dateTabText,
-                selectedDate === d && styles.dateTabTextActive
+                styles.dateTab,
+                selectedDate === d && styles.dateTabActive
               ]}
+              onPress={() => setSelectedDate(d)}
             >
-              {d === todayIso ? "Today" : d.slice(5)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.dateTabText,
+                  selectedDate === d && styles.dateTabTextActive
+                ]}
+              >
+                {d === todayIso ? "Today" : d.slice(5)}
+              </Text>
+              {hasCompleted && <View style={styles.completedDot} />}
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.timezoneNotice}>
         <Text style={styles.timezoneText}>
-          Selected: {selectedDate} | Timezone: Local System / UTC-Aligned
+          Selected: {selectedDate} | Timezone: {analytics?.timezone || "UTC"}
         </Text>
       </View>
 
@@ -205,18 +246,48 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     gap: theme.spacing.md
   },
+  streakBanner: {
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder
+  },
+  streakLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  streakIcon: {
+    fontSize: 28
+  },
+  streakTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: theme.colors.textPrimary
+  },
+  streakSub: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 2
+  },
   dateSelectorRow: {
     flexDirection: "row",
-    gap: theme.spacing.xs
+    gap: 4
   },
   dateTab: {
     flex: 1,
     backgroundColor: theme.colors.surface,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: theme.borderRadius.md,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: theme.colors.surfaceBorder
+    borderColor: theme.colors.surfaceBorder,
+    minHeight: 44
   },
   dateTabActive: {
     backgroundColor: theme.colors.primary,
@@ -224,11 +295,18 @@ const styles = StyleSheet.create({
   },
   dateTabText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700"
   },
   dateTabTextActive: {
     color: "#0F172A"
+  },
+  completedDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.success,
+    marginTop: 3
   },
   timezoneNotice: {
     alignItems: "flex-end"

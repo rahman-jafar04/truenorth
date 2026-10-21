@@ -151,7 +151,9 @@ export function completeTask(
 export function computeHistoricalDailyReport(
   allTasks: InMemoryTask[],
   targetDate: string, // YYYY-MM-DD
-  userTimezone: string = "UTC"
+  userTimezone: string = "UTC",
+  thoughtsLoggedCount: number = 0,
+  focusLockSessionsCount: number = 0
 ): DailyReport {
   let plannedCount = 0;
   let completedCount = 0;
@@ -217,8 +219,8 @@ export function computeHistoricalDailyReport(
     reopenedCount,
     completionRatePercent,
     tasks: dayTasks,
-    thoughtsLoggedCount: 0,
-    focusLockSessionsCount: 0
+    thoughtsLoggedCount,
+    focusLockSessionsCount
   };
 }
 

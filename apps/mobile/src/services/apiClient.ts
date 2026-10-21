@@ -8,6 +8,7 @@ import {
   CreateTaskInput,
   UpdateTaskInput,
   DailyReport,
+  CalendarAnalytics,
   UserProfile,
   UpdateProfileInput,
   ThoughtRecord
@@ -211,6 +212,15 @@ class ApiClient {
   async getDailyReport(date: string, timezone?: string): Promise<{ data: DailyReport }> {
     const tzParam = timezone ? `&timezone=${encodeURIComponent(timezone)}` : "";
     return this.request(`/reports/daily?date=${encodeURIComponent(date)}${tzParam}`);
+  }
+
+  async getCalendarAnalytics(startDate?: string, endDate?: string, timezone?: string): Promise<{ data: CalendarAnalytics }> {
+    const params = new URLSearchParams();
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    if (timezone) params.append("timezone", timezone);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request(`/reports/calendar${query}`);
   }
 }
 
