@@ -11,14 +11,20 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { theme } from "../../theme";
-import { apiClient } from "../../services/apiClient";
+import { useSubmitThought } from "../../hooks/useThoughts";
+import { useGoals } from "../../hooks/useGoals";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function ThoughtCaptureScreen() {
   const router = useRouter();
+  const { profile } = useAuth();
+  const { data: goals = [] } = useGoals();
+  const submitThoughtMutation = useSubmitThought();
+
   const [thought, setThought] = useState("");
   const [contextTag, setContextTag] = useState("Work Resistance");
-  const [faithMode, setFaithMode] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [faithMode, setFaithMode] = useState(profile?.faithModeEnabled ?? false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const contextOptions = [
@@ -30,21 +36,18 @@ export default function ThoughtCaptureScreen() {
   ];
 
   async function handleEvaluate() {
-    if (!thought.trim() || submitting) return;
+    if (!thought.trim() || submitThoughtMutation.isPending) return;
 
-    setSubmitting(true);
     setErrorMsg(null);
 
     try {
-      // In development foundation test, inject mock token for demonstration
-      apiClient.setAuthToken("foundation-dev-token");
-      const res = await apiClient.analyzeThought({
+      const res = await submitThoughtMutation.mutateAsync({
         rawContent: thought.trim(),
-        contextTag,
+        contextTag: contextTag.trim() || undefined,
+        associatedGoalId: selectedGoalId || undefined,
         includeFaithPerspective: faithMode
       });
 
-      // Pass result into analysis result view via router params or global client
       router.push({
         pathname: "/(app)/analysis-result",
         params: {
@@ -56,8 +59,6 @@ export default function ThoughtCaptureScreen() {
       const message =
         err instanceof Error ? err.message : "Failed to obtain AI analysis.";
       setErrorMsg(message);
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -69,21 +70,70 @@ export default function ThoughtCaptureScreen() {
         <View style={styles.privacyTextGroup}>
           <Text style={styles.privacyTitle}>Encrypted & Private</Text>
           <Text style={styles.privacyBody}>
-            Thought text is scrubbed from application access logs. TrueNorth provides direct, non-shaming guidance.
+            Thought content is scrubbed from application access logs. TrueNorth provides direct, non-shaming guidance.
           </Text>
         </View>
       </View>
 
-      <Text style={styles.inputLabel}>What thought or proposed action are you wrestling with?</Text>
+      <View style={styles.labelRow}>
+        <Text style={styles.inputLabel}>What thought or proposed action are you wrestling with?</Text>
+        <Text style={styles.charCount}>{thought.length}/2000</Text>
+      </View>
       <TextInput
         style={styles.textInput}
-        placeholder="e.g. I have a critical deadline in 2 hours, but I want to scroll YouTube because I feel overwhelmed..."
+        placeholder="e.g. I have a critical deadline in 2 hours, but I want to scroll social media because I feel overwhelmed..."
         placeholderTextColor={theme.colors.textMuted}
         multiline
         numberOfLines={6}
+        maxLength={2000}
         value={thought}
         onChangeText={setThought}
       />
+
+      {/* Optional Linked Goal Selector */}
+      {goals.length > 0 && (
+        <>
+          <Text style={styles.inputLabel}>Anchor to Core Goal (optional)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.goalsRow}>
+            <TouchableOpacity
+              style={[
+                styles.goalChip,
+                selectedGoalId === null && styles.goalChipSelected
+              ]}
+              onPress={() => setSelectedGoalId(null)}
+            >
+              <Text
+                style={[
+                  styles.goalChipText,
+                  selectedGoalId === null && styles.goalChipTextSelected
+                ]}
+              >
+                None
+              </Text>
+            </TouchableOpacity>
+            {goals.map((g) => (
+              <TouchableOpacity
+                key={g.id}
+                style={[
+                  styles.goalChip,
+                  selectedGoalId === g.id && styles.goalChipSelected
+                ]}
+                onPress={() => setSelectedGoalId(g.id)}
+              >
+                <Text
+                  style={[
+                    styles.goalChipText,
+                    selectedGoalId === g.id && styles.goalChipTextSelected
+                  ]}
+                  numberOfLines={1}
+                >
+                  {g.title}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       {/* Context Tag Selector */}
       <Text style={styles.inputLabel}>Context Category</Text>
@@ -115,7 +165,7 @@ export default function ThoughtCaptureScreen() {
           <View>
             <Text style={styles.faithTitle}>Optional Faith Perspective</Text>
             <Text style={styles.faithSubtitle}>
-              Reflect against personal spiritual values without supernatural attribution.
+              Reflect against personal spiritual virtues without supernatural attribution.
             </Text>
           </View>
           <Switch
@@ -145,12 +195,12 @@ export default function ThoughtCaptureScreen() {
       <TouchableOpacity
         style={[
           styles.submitBtn,
-          (!thought.trim() || submitting) && styles.submitBtnDisabled
+          (!thought.trim() || submitThoughtMutation.isPending) && styles.submitBtnDisabled
         ]}
-        disabled={!thought.trim() || submitting}
+        disabled={!thought.trim() || submitThoughtMutation.isPending}
         onPress={handleEvaluate}
       >
-        {submitting ? (
+        {submitThoughtMutation.isPending ? (
           <ActivityIndicator color="#0F172A" />
         ) : (
           <Text style={styles.submitBtnText}>Evaluate Goal Alignment →</Text>
@@ -195,10 +245,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 16
   },
+  labelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
   inputLabel: {
     fontSize: 13,
     fontWeight: "700",
     color: theme.colors.textPrimary
+  },
+  charCount: {
+    fontSize: 11,
+    color: theme.colors.textMuted
   },
   textInput: {
     backgroundColor: theme.colors.surface,
@@ -210,6 +269,32 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 120,
     textAlignVertical: "top"
+  },
+  goalsRow: {
+    flexDirection: "row"
+  },
+  goalChip: {
+    backgroundColor: theme.colors.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder,
+    marginRight: 6,
+    maxWidth: 200
+  },
+  goalChipSelected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary
+  },
+  goalChipText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: "600"
+  },
+  goalChipTextSelected: {
+    color: "#0F172A",
+    fontWeight: "700"
   },
   tagRow: {
     flexDirection: "row",

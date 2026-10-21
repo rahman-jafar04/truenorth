@@ -1,18 +1,23 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
-  TouchableOpacity
+  TouchableOpacity,
+  ActivityIndicator
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { theme } from "../../theme";
 import { AiGuidanceResponse } from "@truenorth/shared";
+import { useCreateTask } from "../../hooks/useTasks";
 
 export default function AnalysisResultScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ resultJson?: string; rawThought?: string }>();
+  const createTaskMutation = useCreateTask();
+
+  const [addedTasks, setAddedTasks] = useState<Record<number, boolean>>({});
 
   let guidance: AiGuidanceResponse | null = null;
   try {
@@ -38,7 +43,26 @@ export default function AnalysisResultScreen() {
   }
 
   const isAligned = guidance.alignmentStatus === "ALIGNED";
-  const statusColor = isAligned ? theme.colors.success : theme.colors.warning;
+  const isMisaligned = guidance.alignmentStatus === "MISALIGNED";
+  const statusColor = isAligned
+    ? theme.colors.success
+    : isMisaligned
+    ? theme.colors.error
+    : theme.colors.warning;
+
+  async function handleAddActionAsTask(actionText: string, index: number) {
+    if (addedTasks[index]) return;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    await createTaskMutation.mutateAsync({
+      title: actionText,
+      scheduledDate: todayStr,
+      status: "PLANNED",
+      isRequiredForUnlock: false
+    });
+
+    setAddedTasks((prev) => ({ ...prev, [index]: true }));
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -56,7 +80,7 @@ export default function AnalysisResultScreen() {
             </Text>
           </View>
           <Text style={styles.scoreText}>
-            Alignment Score: {guidance.alignmentScore}%
+            Alignment: {guidance.alignmentScore}/100
           </Text>
         </View>
 
@@ -71,13 +95,13 @@ export default function AnalysisResultScreen() {
 
       {/* Direct Reasoning */}
       <View style={styles.card}>
-        <Text style={styles.sectionHeading}>Direct Reasoning</Text>
+        <Text style={styles.sectionHeading}>Direct Objective Reasoning</Text>
         <Text style={styles.sectionBody}>{guidance.directReasoning}</Text>
       </View>
 
       {/* Non-Shaming Insight */}
       <View style={styles.card}>
-        <Text style={styles.sectionHeading}>Non-Shaming Insight</Text>
+        <Text style={styles.sectionHeading}>Non-Shaming Perspective</Text>
         <Text style={styles.sectionBody}>{guidance.nonShamingInsight}</Text>
       </View>
 
@@ -85,30 +109,65 @@ export default function AnalysisResultScreen() {
       {guidance.faithReflection && (
         <View style={[styles.card, styles.faithCard]}>
           <Text style={[styles.sectionHeading, { color: theme.colors.primary }]}>
-            Personal Faith Reflection
+            Personal Faith Perspective
           </Text>
           <Text style={styles.sectionBody}>{guidance.faithReflection}</Text>
+          <View style={styles.guardrailTag}>
+            <Text style={styles.guardrailTagText}>
+              Theological Rule: Non-supernatural attribution. Rooted purely in personal stewardship and virtue.
+            </Text>
+          </View>
         </View>
       )}
 
-      {/* Recommended Next Actions */}
+      {/* Recommended Next Actions with 1-Tap Add to Tasks */}
       <View style={styles.card}>
         <Text style={styles.sectionHeading}>Recommended Actions</Text>
+        <Text style={styles.sectionSub}>Convert AI recommendations into daily commitments:</Text>
+
         {guidance.recommendedActions.map((action, idx) => (
-          <View key={idx} style={styles.actionItem}>
-            <Text style={styles.actionBullet}>•</Text>
-            <Text style={styles.actionText}>{action}</Text>
+          <View key={idx} style={styles.actionCard}>
+            <View style={styles.actionLeft}>
+              <Text style={styles.actionBullet}>•</Text>
+              <Text style={styles.actionText}>{action}</Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.addTaskBtn,
+                addedTasks[idx] && styles.addTaskBtnDone
+              ]}
+              disabled={addedTasks[idx] || createTaskMutation.isPending}
+              onPress={() => handleAddActionAsTask(action, idx)}
+            >
+              <Text
+                style={[
+                  styles.addTaskBtnText,
+                  addedTasks[idx] && styles.addTaskBtnTextDone
+                ]}
+              >
+                {addedTasks[idx] ? "✓ Added" : "+ Add Task"}
+              </Text>
+            </TouchableOpacity>
           </View>
         ))}
       </View>
 
-      {/* Navigation Footer */}
-      <TouchableOpacity
-        style={styles.doneBtn}
-        onPress={() => router.replace("/(app)")}
-      >
-        <Text style={styles.doneBtnText}>Return to Today's Dashboard</Text>
-      </TouchableOpacity>
+      {/* Action Buttons */}
+      <View style={styles.buttonsRow}>
+        <TouchableOpacity
+          style={styles.reflectAnotherBtn}
+          onPress={() => router.replace("/(app)/thought-capture")}
+        >
+          <Text style={styles.reflectAnotherText}>Reflect Another</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.doneBtn}
+          onPress={() => router.replace("/(app)")}
+        >
+          <Text style={styles.doneBtnText}>Dashboard →</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -166,7 +225,7 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     color: theme.colors.textPrimary,
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: 15
   },
   categoryRow: {
@@ -185,7 +244,7 @@ const styles = StyleSheet.create({
   },
   categoryChipText: {
     color: theme.colors.textSecondary,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600"
   },
   card: {
@@ -202,39 +261,105 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: theme.colors.textPrimary,
-    marginBottom: 6
+    marginBottom: 4
+  },
+  sectionSub: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.sm
   },
   sectionBody: {
     fontSize: 14,
     color: theme.colors.textSecondary,
     lineHeight: 20
   },
-  actionItem: {
+  guardrailTag: {
+    marginTop: theme.spacing.sm,
+    backgroundColor: "rgba(56, 189, 248, 0.08)",
+    padding: 8,
+    borderRadius: theme.borderRadius.sm
+  },
+  guardrailTagText: {
+    fontSize: 11,
+    color: theme.colors.primary,
+    lineHeight: 15
+  },
+  actionCard: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.xs
+  },
+  actionLeft: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs
+    gap: 4
   },
   actionBullet: {
     color: theme.colors.primary,
-    fontSize: 16
+    fontSize: 14,
+    paddingTop: 1
   },
   actionText: {
     flex: 1,
     color: theme.colors.textPrimary,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  addTaskBtn: {
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: theme.borderRadius.sm
+  },
+  addTaskBtnDone: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    borderColor: theme.colors.success
+  },
+  addTaskBtnText: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  addTaskBtnTextDone: {
+    color: theme.colors.success
+  },
+  buttonsRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs
+  },
+  reflectAnotherBtn: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceBorder,
+    paddingVertical: 14,
+    borderRadius: theme.borderRadius.lg,
+    alignItems: "center"
+  },
+  reflectAnotherText: {
+    color: theme.colors.textPrimary,
     fontSize: 14,
-    lineHeight: 19
+    fontWeight: "700"
   },
   doneBtn: {
+    flex: 1,
     backgroundColor: theme.colors.primary,
     paddingVertical: 14,
     borderRadius: theme.borderRadius.lg,
-    alignItems: "center",
-    marginTop: theme.spacing.sm
+    alignItems: "center"
   },
   doneBtnText: {
     color: "#0F172A",
     fontWeight: "700",
-    fontSize: 15
+    fontSize: 14
   }
 });

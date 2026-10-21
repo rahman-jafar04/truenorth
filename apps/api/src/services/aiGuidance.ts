@@ -63,7 +63,7 @@ export function validateAndGuardGuidance(raw: unknown): ValidationResult {
 
   // A. Check literal prohibited phrases
   for (const literal of THEOLOGICAL_GUARDRAILS.PROHIBITED_LITERAL_PHRASES) {
-    if (combinedText.includes(literal)) {
+    if (combinedText.includes(literal.toLowerCase())) {
       return {
         success: false,
         error: "THEOLOGICAL_ATTRIBUTION_DETECTED",
@@ -125,57 +125,134 @@ CORE RULES:
 }
 
 /**
+ * Builds safe fallback guidance that enforces strict non-supernatural framing
+ * when live LLM is offline, unconfigured, or fails theological validation.
+ */
+function createSafeFallbackGuidance(params: AnalyzeThoughtParams, reason?: string): AiGuidanceResponse {
+  const { thought, faithModeEnabled, personalValues } = params;
+  const isProcrastination =
+    thought.toLowerCase().includes("later") ||
+    thought.toLowerCase().includes("scroll") ||
+    thought.toLowerCase().includes("tomorrow") ||
+    thought.toLowerCase().includes("tired") ||
+    thought.toLowerCase().includes("avoid");
+
+  const primaryValue = personalValues[0] || "diligence";
+
+  return {
+    categories: isProcrastination
+      ? ["PROCRASTINATION_IMPULSE", "DISCIPLINE_OPPORTUNITY"]
+      : ["PRODUCTIVE_REFLECTION", "GOAL_ALIGNED"],
+    alignmentStatus: isProcrastination ? "MISALIGNED" : "ALIGNED",
+    directReasoning: reason
+      ? `Guidance filtered for safety: ${reason}. TrueNorth anchors accountability directly in your observable actions and declared values.`
+      : isProcrastination
+      ? "Delaying this commitment reduces momentum on your declared goals. The immediate impulse favors temporary comfort over long-term execution."
+      : "This thought demonstrates constructive awareness and active engagement with your core priorities.",
+    recommendedActions: isProcrastination
+      ? [
+          "Break the current task down into a single 5-minute micro-step.",
+          "Activate Focus Lock to remove friction and social media temptation."
+        ]
+      : ["Record this insight and schedule the next concrete milestone."],
+    nonShamingInsight: isProcrastination
+      ? "Hesitation is a normal human response to resistance, not a character flaw. Focus on restarting without self-criticism."
+      : "Consistent reflection reinforces your commitment to intentional living.",
+    faithReflection: faithModeEnabled
+      ? `Reflect on ${primaryValue}: practicing faithfulness and integrity in small moments builds lasting endurance, independent of external pressure.`
+      : null,
+    alignmentScore: isProcrastination ? 35 : 85
+  };
+}
+
+/**
+ * Calls a hosted LLM provider (OpenAI / Gemini / Anthropic compatible) when configured.
+ */
+async function callHostedLlmProvider(params: AnalyzeThoughtParams): Promise<AiGuidanceResponse | null> {
+  const apiKey = process.env.LLM_API_KEY;
+  if (!apiKey) return null;
+
+  const model = process.env.LLM_MODEL || "gpt-4o-mini";
+  const systemPrompt = buildSystemPrompt(params.faithModeEnabled, params.personalValues);
+
+  const userMessage = params.goalTitle
+    ? `Context: Associated with goal "${params.goalTitle}".\nThought to analyze: "${params.thought}"`
+    : `Thought to analyze: "${params.thought}"`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.2
+      })
+    });
+
+    if (!res.ok) {
+      logger.warn("Hosted LLM API returned non-200 status", { status: res.status });
+      return null;
+    }
+
+    const json = (await res.json()) as any;
+    const content = json.choices?.[0]?.message?.content;
+    if (!content) return null;
+
+    const parsedJson = JSON.parse(content);
+    const validation = validateAndGuardGuidance(parsedJson);
+
+    if (!validation.success) {
+      logger.warn("Hosted LLM response failed theological guardrail check", {
+        error: validation.error
+      });
+      return createSafeFallbackGuidance(params, validation.safeMessage);
+    }
+
+    return validation.data;
+  } catch (err) {
+    logger.warn("Hosted LLM call failed; reverting to safe fallback", {
+      error: (err as Error).message
+    });
+    return null;
+  }
+}
+
+/**
  * AI Guidance Service.
  * Evaluates thoughts through hosted LLM or deterministic fallback during offline development/testing.
  */
 export async function analyzeThought(params: AnalyzeThoughtParams): Promise<AiGuidanceResponse> {
-  const { thought, faithModeEnabled, personalValues, goalTitle } = params;
+  const { faithModeEnabled, goalTitle } = params;
 
+  // PRIVACY: Log thought submission without exposing private thought content
   logger.info("Analyzing user thought", {
     faithModeEnabled,
     hasGoal: Boolean(goalTitle)
-    // Note: thought content is omitted for user privacy
   });
 
-  // If no LLM key is configured (local dev / offline test), provide deterministic guidance
-  if (!process.env.LLM_API_KEY) {
-    const isProcrastination =
-      thought.toLowerCase().includes("later") ||
-      thought.toLowerCase().includes("scroll") ||
-      thought.toLowerCase().includes("tomorrow") ||
-      thought.toLowerCase().includes("tired");
-
-    const fallbackResponse: AiGuidanceResponse = {
-      categories: isProcrastination
-        ? ["PROCRASTINATION_IMPULSE", "DISCIPLINE_OPPORTUNITY"]
-        : ["PRODUCTIVE_REFLECTION", "GOAL_ALIGNED"],
-      alignmentStatus: isProcrastination ? "MISALIGNED" : "ALIGNED",
-      directReasoning: isProcrastination
-        ? "Delaying this commitment reduces momentum on your declared goals. The immediate impulse favors temporary comfort over long-term execution."
-        : "This thought demonstrates constructive awareness and active engagement with your core priorities.",
-      recommendedActions: isProcrastination
-        ? [
-            "Break the current task down into a single 5-minute micro-step.",
-            "Activate Focus Lock to remove friction and social media temptation."
-          ]
-        : ["Record this insight and schedule the next concrete milestone."],
-      nonShamingInsight: isProcrastination
-        ? "Hesitation is a normal human response to resistance, not a character flaw. Focus on restarting without self-criticism."
-        : "Consistent reflection reinforces your commitment to intentional living.",
-      faithReflection: faithModeEnabled
-        ? `Reflect on ${personalValues[0] || "diligence and stewardship"}: practicing faithfulness in small moments builds lasting endurance.`
-        : null,
-      alignmentScore: isProcrastination ? 35 : 85
-    };
-
-    const validation = validateAndGuardGuidance(fallbackResponse);
-    if (!validation.success) {
-      throw new AiGuidanceValidationError(validation.safeMessage);
+  // Attempt live hosted LLM if configured
+  if (process.env.LLM_API_KEY) {
+    const liveGuidance = await callHostedLlmProvider(params);
+    if (liveGuidance) {
+      return liveGuidance;
     }
-
-    return validation.data;
   }
 
-  // Production hosted LLM integration branch (requires provider key)
-  throw new Error("Live hosted LLM call requested but LLM_API_KEY is not configured.");
+  // Safe deterministic guidance fallback (offline dev / CI / test double)
+  const fallback = createSafeFallbackGuidance(params);
+  const validation = validateAndGuardGuidance(fallback);
+
+  if (!validation.success) {
+    throw new AiGuidanceValidationError(validation.safeMessage);
+  }
+
+  return validation.data;
 }

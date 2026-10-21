@@ -9,7 +9,8 @@ import {
   UpdateTaskInput,
   DailyReport,
   UserProfile,
-  UpdateProfileInput
+  UpdateProfileInput,
+  ThoughtRecord
 } from "@truenorth/shared";
 
 const API_BASE_URL =
@@ -110,10 +111,28 @@ class ApiClient {
   }
 
   // Thoughts & AI Guidance
-  async analyzeThought(input: SubmitThoughtInput): Promise<{ data: AiGuidanceResponse }> {
+  async analyzeThought(input: SubmitThoughtInput): Promise<{ data: AiGuidanceResponse; thought?: ThoughtRecord }> {
     return this.request("/thoughts/analyze", {
       method: "POST",
       body: JSON.stringify(input)
+    });
+  }
+
+  async getThoughts(goalId?: string, limit?: number): Promise<{ data: ThoughtRecord[] }> {
+    const params = new URLSearchParams();
+    if (goalId) params.append("goalId", goalId);
+    if (limit) params.append("limit", limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request(`/thoughts${query}`);
+  }
+
+  async getThoughtById(thoughtId: string): Promise<{ data: ThoughtRecord }> {
+    return this.request(`/thoughts/${thoughtId}`);
+  }
+
+  async deleteThought(thoughtId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/thoughts/${thoughtId}`, {
+      method: "DELETE"
     });
   }
 

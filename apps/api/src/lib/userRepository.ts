@@ -82,6 +82,9 @@ export class UserRepository {
     id: string;
     email: string;
     displayName?: string;
+    faithModeEnabled?: boolean;
+    personalValues?: string[];
+    timezone?: string;
   }): Promise<UserProfile> {
     const now = new Date().toISOString();
 
@@ -91,15 +94,18 @@ export class UserRepository {
           where: { id: data.id },
           update: {
             email: data.email,
-            ...(data.displayName ? { displayName: data.displayName } : {})
+            ...(data.displayName !== undefined ? { displayName: data.displayName } : {}),
+            ...(data.faithModeEnabled !== undefined ? { faithModeEnabled: data.faithModeEnabled } : {}),
+            ...(data.personalValues !== undefined ? { personalValues: data.personalValues } : {}),
+            ...(data.timezone !== undefined ? { timezone: data.timezone } : {})
           },
           create: {
             id: data.id,
             email: data.email,
             displayName: data.displayName,
-            faithModeEnabled: false,
-            personalValues: ["Diligence", "Integrity", "Deep Focus"],
-            timezone: "UTC"
+            faithModeEnabled: data.faithModeEnabled ?? false,
+            personalValues: data.personalValues ?? ["Diligence", "Integrity", "Deep Focus"],
+            timezone: data.timezone ?? "UTC"
           }
         });
 
@@ -131,6 +137,9 @@ export class UserRepository {
         ...existing,
         email: data.email,
         displayName: data.displayName ?? existing.displayName,
+        faithModeEnabled: data.faithModeEnabled ?? existing.faithModeEnabled,
+        personalValues: data.personalValues ?? existing.personalValues,
+        timezone: data.timezone ?? existing.timezone,
         updatedAt: now
       };
       inMemoryUsers.set(data.id, updated);
@@ -141,9 +150,9 @@ export class UserRepository {
       id: data.id,
       email: data.email,
       displayName: data.displayName,
-      faithModeEnabled: false,
-      personalValues: ["Diligence", "Integrity", "Deep Focus"],
-      timezone: "UTC",
+      faithModeEnabled: data.faithModeEnabled ?? false,
+      personalValues: data.personalValues ?? ["Diligence", "Integrity", "Deep Focus"],
+      timezone: data.timezone ?? "UTC",
       createdAt: now,
       updatedAt: now
     };

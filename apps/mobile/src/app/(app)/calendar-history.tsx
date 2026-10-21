@@ -1,53 +1,40 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
   TouchableOpacity,
-  Alert
+  Alert,
+  ActivityIndicator
 } from "react-native";
 import { theme } from "../../theme";
+import { useTasks } from "../../hooks/useTasks";
+import { useThoughts, useDeleteThought } from "../../hooks/useThoughts";
+import { ThoughtRecord } from "@truenorth/shared";
+
+function getRecentDates(): string[] {
+  const dates: string[] = [];
+  const today = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
 
 export default function CalendarHistoryScreen() {
-  const [selectedDate, setSelectedDate] = useState("2026-10-12");
+  const recentDates = useMemo(() => getRecentDates(), []);
+  const [selectedDate, setSelectedDate] = useState<string>(recentDates[0]);
 
-  const pastDates = ["2026-10-13", "2026-10-12", "2026-10-11", "2026-10-10"];
+  const { data: tasks = [], isLoading: tasksLoading } = useTasks(selectedDate);
+  const { data: thoughts = [], isLoading: thoughtsLoading } = useThoughts();
+  const deleteThoughtMutation = useDeleteThought();
 
-  const historicalTasks: Record<
-    string,
-    Array<{
-      id: string;
-      title: string;
-      status: string;
-      rescheduledTo?: string;
-      rescheduleReason?: string;
-    }>
-  > = {
-    "2026-10-12": [
-      {
-        id: "h1",
-        title: "Database Architecture Specification",
-        status: "COMPLETED"
-      },
-      {
-        id: "h2",
-        title: "Focus Lock Native Feasibility Whitepaper",
-        status: "RESCHEDULED",
-        rescheduledTo: "2026-10-13",
-        rescheduleReason: "Needed in-depth review of Apple FamilyControls entitlement"
-      }
-    ],
-    "2026-10-11": [
-      {
-        id: "h3",
-        title: "Initial Monorepo Research",
-        status: "COMPLETED"
-      }
-    ]
-  };
-
-  const dayTasks = historicalTasks[selectedDate] || [];
+  const dayThoughts = useMemo(() => {
+    return thoughts.filter((t) => t.createdAt.slice(0, 10) === selectedDate);
+  }, [thoughts, selectedDate]);
 
   function handleDeleteThought(thoughtId: string) {
     Alert.alert(
@@ -55,16 +42,28 @@ export default function CalendarHistoryScreen() {
       "This thought and its AI guidance will be permanently purged from database records.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete Permanently", style: "destructive", onPress: () => console.log("Deleted", thoughtId) }
+        {
+          text: "Delete Permanently",
+          style: "destructive",
+          onPress: () => {
+            deleteThoughtMutation.mutate(thoughtId, {
+              onError: (err) => {
+                Alert.alert("Delete Failed", err.message || "Failed to delete thought.");
+              }
+            });
+          }
+        }
       ]
     );
   }
+
+  const todayIso = recentDates[0];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Day Selector */}
       <View style={styles.dateSelectorRow}>
-        {pastDates.map((d) => (
+        {recentDates.map((d) => (
           <TouchableOpacity
             key={d}
             style={[
@@ -79,23 +78,27 @@ export default function CalendarHistoryScreen() {
                 selectedDate === d && styles.dateTabTextActive
               ]}
             >
-              {d === "2026-10-13" ? "Today" : d.slice(5)}
+              {d === todayIso ? "Today" : d.slice(5)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <View style={styles.timezoneNotice}>
-        <Text style={styles.timezoneText}>Timezone: Local System / UTC-Aligned</Text>
+        <Text style={styles.timezoneText}>
+          Selected: {selectedDate} | Timezone: Local System / UTC-Aligned
+        </Text>
       </View>
 
       {/* Historical Tasks for Date */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Tasks on {selectedDate}</Text>
-        {dayTasks.length === 0 ? (
+        {tasksLoading ? (
+          <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 12 }} />
+        ) : tasks.length === 0 ? (
           <Text style={styles.emptyText}>No recorded tasks for this date.</Text>
         ) : (
-          dayTasks.map((task) => (
+          tasks.map((task) => (
             <View key={task.id} style={styles.historyTaskItem}>
               <View style={styles.taskStatusRow}>
                 <Text
@@ -103,7 +106,9 @@ export default function CalendarHistoryScreen() {
                     styles.statusBadge,
                     task.status === "COMPLETED"
                       ? styles.statusCompleted
-                      : styles.statusRescheduled
+                      : task.status === "RESCHEDULED"
+                      ? styles.statusRescheduled
+                      : styles.statusPlanned
                   ]}
                 >
                   {task.status}
@@ -111,10 +116,10 @@ export default function CalendarHistoryScreen() {
                 <Text style={styles.taskName}>{task.title}</Text>
               </View>
 
-              {task.rescheduleReason && (
+              {task.rescheduledToDate && (
                 <View style={styles.auditReasonBox}>
                   <Text style={styles.auditReasonText}>
-                    Rescheduled to {task.rescheduledTo}: "{task.rescheduleReason}"
+                    Rescheduled to: {task.rescheduledToDate}
                   </Text>
                 </View>
               )}
@@ -125,18 +130,67 @@ export default function CalendarHistoryScreen() {
 
       {/* Past Thoughts on Selected Date */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Reflected Thoughts</Text>
-        <View style={styles.thoughtItem}>
-          <Text style={styles.thoughtSnippet}>
-            "Wrestled with procrastination regarding Focus Lock native implementation complexity."
-          </Text>
-          <View style={styles.thoughtFooter}>
-            <Text style={styles.alignmentPill}>Alignment: 75%</Text>
-            <TouchableOpacity onPress={() => handleDeleteThought("th-12")}>
-              <Text style={styles.deleteLink}>Delete Permanently</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.headerRow}>
+          <Text style={styles.cardTitle}>Reflected Thoughts</Text>
+          {thoughtsLoading && <ActivityIndicator size="small" color={theme.colors.primary} />}
         </View>
+
+        {thoughtsLoading ? (
+          <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 12 }} />
+        ) : dayThoughts.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>No reflected thoughts recorded on {selectedDate}.</Text>
+            <Text style={styles.emptySubtext}>
+              Capture thoughts on the Thought Capture tab to receive guarded guidance.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.thoughtsList}>
+            {dayThoughts.map((thought: ThoughtRecord) => (
+              <View key={thought.id} style={styles.thoughtItem}>
+                <View style={styles.thoughtHeaderRow}>
+                  {thought.contextTag && (
+                    <Text style={styles.contextBadge}>{thought.contextTag}</Text>
+                  )}
+                  {thought.guidance?.alignmentScore !== undefined && (
+                    <Text style={styles.alignmentPill}>
+                      Alignment: {thought.guidance.alignmentScore}% (
+                      {thought.guidance.alignmentStatus})
+                    </Text>
+                  )}
+                </View>
+
+                <Text style={styles.thoughtSnippet}>"{thought.content}"</Text>
+
+                {thought.guidance?.directReasoning && (
+                  <View style={styles.reasoningBox}>
+                    <Text style={styles.reasoningLabel}>AI Insight:</Text>
+                    <Text style={styles.reasoningContent} numberOfLines={3}>
+                      {thought.guidance.directReasoning}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.thoughtFooter}>
+                  <Text style={styles.timeLabel}>
+                    {new Date(thought.createdAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteThought(thought.id)}
+                    disabled={deleteThoughtMutation.isPending}
+                  >
+                    <Text style={styles.deleteLink}>
+                      {deleteThoughtMutation.isPending ? "Purging..." : "Delete Permanently"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -170,7 +224,7 @@ const styles = StyleSheet.create({
   },
   dateTabText: {
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700"
   },
   dateTabTextActive: {
@@ -190,15 +244,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.surfaceBorder
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.md
+  },
   cardTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.md
+    color: theme.colors.textPrimary
+  },
+  emptyBox: {
+    paddingVertical: theme.spacing.md
   },
   emptyText: {
     color: theme.colors.textMuted,
     fontSize: 13
+  },
+  emptySubtext: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    marginTop: 4
   },
   historyTaskItem: {
     paddingVertical: theme.spacing.sm,
@@ -225,6 +292,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(99, 102, 241, 0.2)",
     color: theme.colors.accent
   },
+  statusPlanned: {
+    backgroundColor: "rgba(148, 163, 184, 0.2)",
+    color: theme.colors.textSecondary
+  },
   taskName: {
     flex: 1,
     color: theme.colors.textPrimary,
@@ -242,28 +313,72 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontStyle: "italic"
   },
+  thoughtsList: {
+    gap: theme.spacing.sm
+  },
   thoughtItem: {
     backgroundColor: theme.colors.background,
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.surfaceBorder
+    borderColor: theme.colors.surfaceBorder,
+    gap: theme.spacing.xs
   },
-  thoughtSnippet: {
-    fontSize: 13,
-    color: theme.colors.textPrimary,
-    lineHeight: 18
-  },
-  thoughtFooter: {
+  thoughtHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: theme.spacing.sm
+    alignItems: "center"
+  },
+  contextBadge: {
+    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    color: theme.colors.accent,
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm,
+    textTransform: "uppercase"
   },
   alignmentPill: {
     fontSize: 11,
     color: theme.colors.primary,
     fontWeight: "700"
+  },
+  thoughtSnippet: {
+    fontSize: 13,
+    color: theme.colors.textPrimary,
+    lineHeight: 18,
+    fontStyle: "italic"
+  },
+  reasoningBox: {
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.xs,
+    borderRadius: theme.borderRadius.sm,
+    marginTop: 4
+  },
+  reasoningLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase"
+  },
+  reasoningContent: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    lineHeight: 16
+  },
+  thoughtFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.surfaceBorder
+  },
+  timeLabel: {
+    fontSize: 11,
+    color: theme.colors.textMuted
   },
   deleteLink: {
     fontSize: 11,
