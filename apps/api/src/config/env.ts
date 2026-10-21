@@ -45,8 +45,8 @@ export function getLlmConfig(): LlmConfig {
 
   if (provider === "groq") {
     endpoint = endpoint || "https://api.groq.com/openai/v1/chat/completions";
-    // llama-3.3-70b-versatile provides near-instant JSON inference and high reasoning accuracy
-    model = model || "llama-3.3-70b-versatile";
+    // openai/gpt-oss-120b provides fast JSON inference and high reasoning accuracy on Groq
+    model = model || "openai/gpt-oss-120b";
   } else {
     endpoint = endpoint || "https://api.openai.com/v1/chat/completions";
     model = model || "gpt-4o-mini";

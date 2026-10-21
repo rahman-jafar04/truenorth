@@ -29,7 +29,7 @@ describe("LLM Configuration & Groq Provider Resolution", () => {
     expect(config.apiKey).toBe("gsk_test_groq_key_123456");
     expect(config.provider).toBe("groq");
     expect(config.endpoint).toBe("https://api.groq.com/openai/v1/chat/completions");
-    expect(config.model).toBe("llama-3.3-70b-versatile");
+    expect(config.model).toBe("openai/gpt-oss-120b");
   });
 
   it("should auto-detect Groq when LLM_API_KEY starts with gsk_", () => {
