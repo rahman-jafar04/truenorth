@@ -9,14 +9,52 @@ const isPlaceholderConfig =
   !SUPABASE_ANON_KEY ||
   SUPABASE_ANON_KEY.includes("placeholder");
 
-// Persistent memory storage adapter for Expo Web & Native
+// Persistent storage adapter for Expo Web (localStorage) & Native (in-memory map)
 const memoryStorage = new Map<string, string>();
+
+function getLocalStorage(): any {
+  try {
+    if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+      return (globalThis as any).localStorage;
+    }
+  } catch {
+    // Fallback
+  }
+  return null;
+}
+
 const storageAdapter = {
-  getItem: (key: string) => memoryStorage.get(key) ?? null,
-  setItem: (key: string, value: string) => {
+  getItem: (key: string): string | null => {
+    const ls = getLocalStorage();
+    if (ls) {
+      try {
+        return ls.getItem(key);
+      } catch {
+        // Fallback
+      }
+    }
+    return memoryStorage.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    const ls = getLocalStorage();
+    if (ls) {
+      try {
+        ls.setItem(key, value);
+      } catch {
+        // Fallback
+      }
+    }
     memoryStorage.set(key, value);
   },
-  removeItem: (key: string) => {
+  removeItem: (key: string): void => {
+    const ls = getLocalStorage();
+    if (ls) {
+      try {
+        ls.removeItem(key);
+      } catch {
+        // Fallback
+      }
+    }
     memoryStorage.delete(key);
   }
 };
@@ -52,7 +90,7 @@ export const supabaseAuthService = {
   ): Promise<{ user: AuthSessionUser | null; error: Error | null }> {
     if (isPlaceholderConfig) {
       // Local development test fallback
-      const mockId = `user-${Date.now()}`;
+      const mockId = "00000000-0000-0000-0000-000000000001";
       const mockUser: AuthSessionUser = {
         id: mockId,
         email,
@@ -100,7 +138,7 @@ export const supabaseAuthService = {
   ): Promise<{ user: AuthSessionUser | null; error: Error | null }> {
     if (isPlaceholderConfig) {
       // Local development test fallback
-      const mockId = "dev-user-001";
+      const mockId = "00000000-0000-0000-0000-000000000001";
       const mockUser: AuthSessionUser = {
         id: mockId,
         email,
@@ -159,7 +197,7 @@ export const supabaseAuthService = {
       try {
         return JSON.parse(raw);
       } catch {
-        return null;
+        // Fallback
       }
     }
 
@@ -173,6 +211,16 @@ export const supabaseAuthService = {
           token: data.session.access_token
         };
       }
+    } else {
+      // In local development with placeholder Supabase credentials, auto-initialize demo session
+      const defaultDevUser: AuthSessionUser = {
+        id: "00000000-0000-0000-0000-000000000001",
+        email: "demo@truenorth.app",
+        displayName: "Demo Explorer",
+        token: "mock-token-00000000-0000-0000-0000-000000000001"
+      };
+      storageAdapter.setItem("truenorth-auth-session", JSON.stringify(defaultDevUser));
+      return defaultDevUser;
     }
 
     return null;

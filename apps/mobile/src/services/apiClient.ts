@@ -35,6 +35,21 @@ class ApiClient {
   }
 
   getAuthToken(): string | null {
+    if (!this.authToken) {
+      try {
+        if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+          const stored = (globalThis as any).localStorage.getItem("truenorth-auth-session");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed?.token) {
+              this.authToken = parsed.token;
+            }
+          }
+        }
+      } catch {
+        // Fallback
+      }
+    }
     return this.authToken;
   }
 
@@ -45,8 +60,9 @@ class ApiClient {
       ...(options.headers as Record<string, string>)
     };
 
-    if (this.authToken) {
-      headers["Authorization"] = `Bearer ${this.authToken}`;
+    const token = this.getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
     }
 
     const response = await fetch(url, {
